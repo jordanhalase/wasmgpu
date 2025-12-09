@@ -1,0 +1,13 @@
+[build]
+target = "wasm32-unknown-unknown"
+
+# Optional: always use wasm-bindgen-cli or trunk's linker when building
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"   # only if you have wasm-bindgen-test
+
+# Make rust-analyzer use the same target (critical!)
+[unstable]
+build-std = ["std", "panic_abort"]
+
+# Tell cargo to always pass --target to rustc even for `cargo check`, etc.
+default-target = "wasm32-unknown-unknown"

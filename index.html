@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebGPU</title>
+    <!--link rel="stylesheet" href="style.css" type="text/css"-->
+</head>
+<body>
+    <canvas id="canvas" width="1024" height="768"></canvas>
+    <script type="module">
+        import init, { start_webgpu_app } from "./pkg/wasmgpu.js";
+
+        async function run() {
+            await init();
+            await start_webgpu_app("canvas");
+        }
+
+        run();
+    </script>
+</body>
+</html>
