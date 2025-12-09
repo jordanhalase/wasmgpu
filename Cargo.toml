@@ -10,6 +10,7 @@ wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Document", "Window", "HtmlCanvasElement"] }
 log = "0.4"
 console_log = "1"
+bytemuck = "1.24"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -828,6 +828,7 @@ dependencies = [
 name = "wasmgpu"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "console_log",
  "log",
  "wasm-bindgen",
