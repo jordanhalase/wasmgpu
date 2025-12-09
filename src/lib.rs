@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use wgpu::*;
+use wgpu;
 use log::info;
 
 #[wasm_bindgen]
@@ -18,13 +18,13 @@ pub async fn start_webgpu_app(canvas_id: String) {
     let height = canvas.height();
 
     // Create a wgpu instance
-    let instance = Instance::new(&InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
 
-    let surface = instance.create_surface(SurfaceTarget::Canvas(canvas))
+    let surface = instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas))
         .expect("Could not create surface");
 
-    let adapter = instance.request_adapter(&RequestAdapterOptions {
-        power_preference: PowerPreference::None,
+    let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::None,
         force_fallback_adapter: false,
         compatible_surface: Some(&surface),
     })
@@ -32,13 +32,13 @@ pub async fn start_webgpu_app(canvas_id: String) {
     .expect("Could not get appropriate adapter");
 
     let (device, queue) = adapter.request_device(
-        &DeviceDescriptor {
+        &wgpu::DeviceDescriptor {
             label: None,
-            required_features: Features::default(),
-            required_limits: Limits::defaults(),
-            experimental_features: ExperimentalFeatures::disabled(),
-            memory_hints: MemoryHints::default(),
-            trace: Trace::Off,
+            required_features: wgpu::Features::default(),
+            required_limits: wgpu::Limits::defaults(),
+            experimental_features: wgpu::ExperimentalFeatures::disabled(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: wgpu::Trace::Off,
         },
     )
     .await
@@ -52,18 +52,18 @@ pub async fn start_webgpu_app(canvas_id: String) {
     let output = surface.get_current_texture().expect("Could not get current texture");
 
     // Render image (simplified)
-    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
-    let view = output.texture.create_view(&TextureViewDescriptor::default());
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
     {
-        let _render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+        let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
-            color_attachments: &[Some(RenderPassColorAttachment {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
                 depth_slice: None,
                 resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(Color::BLUE),
-                    store: StoreOp::Store,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
