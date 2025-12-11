@@ -1,9 +1,11 @@
+#![no_std]
+
 use wasm_bindgen::prelude::*;
 use wgpu::{self, include_wgsl};
 use log::info;
 
 #[wasm_bindgen]
-pub async fn start_webgpu_app(canvas_id: String) {
+pub async fn start_webgpu_app(canvas_id: &str) {
     // Get the canvas element from the DOM
     let window = web_sys::window().expect("No window found");
     let document = window.document().expect("No document found");
@@ -117,8 +119,14 @@ pub async fn start_webgpu_app(canvas_id: String) {
         mapped_at_creation: false,
     });
 
-    let compute_shader_text = include_wgsl!("shader.wgsl");
-    let compute_shader_module = device.create_shader_module(compute_shader_text);
+    //let compute_shader_text = include_wgsl!("shader.wgsl");
+    //let compute_shader_module = device.create_shader_module(compute_shader_text);
+
+    let compute_shader_text= include_str!("shader.wgsl");
+    let compute_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(compute_shader_text.into()),
+    });
 
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: None,
