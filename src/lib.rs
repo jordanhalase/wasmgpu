@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use wgpu;
+use wgpu::{self, include_wgsl};
 use log::info;
 
 #[wasm_bindgen]
@@ -117,20 +117,8 @@ pub async fn start_webgpu_app(canvas_id: String) {
         mapped_at_creation: false,
     });
 
-    let compute_shader_text = r#"
-    @group(0) @binding(0) var<storage, read_write> data: array<u32>;
-
-    @compute @workgroup_size(32) fn compute_main(@builtin(global_invocation_id) gid: vec3u)
-    {
-        let i = gid.y*32 + gid.x;
-        data[i] = i;
-    }
-    "#;
-
-    let compute_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(compute_shader_text.into()),
-    });
+    let compute_shader_text = include_wgsl!("shader.wgsl");
+    let compute_shader_module = device.create_shader_module(compute_shader_text);
 
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: None,
