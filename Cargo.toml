@@ -11,6 +11,7 @@ web-sys = { version = "0.3", features = ["Document", "Window", "HtmlCanvasElemen
 log = "0.4"
 console_log = "1"
 bytemuck = "1.24"
+futures = "0.3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
