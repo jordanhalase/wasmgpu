@@ -5,6 +5,28 @@ use wasm_bindgen::prelude::*;
 
 mod meshgrid;
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+impl Vertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use core::mem::size_of;
+
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
 #[wasm_bindgen]
 pub async fn start_webgpu_app(canvas_id: &str) {
     // Get the canvas element from the DOM
@@ -49,6 +71,18 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         .await
         .expect("Could not create device");
 
+    // Create a compute pipeline
+
+    let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
+    let meshgrid_buffers = meshgrid_generator.generate_buffers(2);
+
+    // Inspect the meshgrid buffers
+    #[cfg(feature = "readback")]
+    {
+        meshgrid_generator.print_vertices(&meshgrid_buffers).await;
+        meshgrid_generator.print_indices(&meshgrid_buffers).await;
+    }
+
     // Configure the surface
     let config = surface
         .get_default_config(&adapter, width, height)
@@ -59,6 +93,46 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         .get_current_texture()
         .expect("Could not get current texture");
 
+    let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: None, // TODO
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[Vertex::desc()],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: config.format,
+                blend: Some(wgpu::BlendState::REPLACE),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None, // Some(wgpu::Face::Back),
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
     // Render image (simplified)
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -66,7 +140,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
     {
-        let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
@@ -81,6 +155,18 @@ pub async fn start_webgpu_app(canvas_id: &str) {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
+
+        render_pass.set_pipeline(&render_pipeline);
+        render_pass.set_vertex_buffer(0, meshgrid_buffers.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(
+            meshgrid_buffers.index_buffer.slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
+        render_pass.draw_indexed(
+            0..(meshgrid_buffers.index_buffer.size() / 4) as u32,
+            0,
+            0..1,
+        );
     }
 
     let command_buffer = encoder.finish();
@@ -88,16 +174,4 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     output.present();
 
     info!("{}, {}", width, height);
-
-    // Create a compute pipeline
-
-    let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
-    let meshgrid_buffers = meshgrid_generator.generate_buffers(2);
-
-    // Inspect the meshgrid buffers
-    #[cfg(feature = "readback")]
-    {
-        meshgrid_generator.print_vertices(&meshgrid_buffers).await;
-        meshgrid_generator.print_indices(&meshgrid_buffers).await;
-    }
 }
