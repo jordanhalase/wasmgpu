@@ -3,7 +3,7 @@
 use log::info;
 use wasm_bindgen::prelude::*;
 
-mod mesh_generator;
+mod meshgrid;
 
 #[wasm_bindgen]
 pub async fn start_webgpu_app(canvas_id: &str) {
@@ -91,5 +91,13 @@ pub async fn start_webgpu_app(canvas_id: &str) {
 
     // Create a compute pipeline
 
-    mesh_generator::MeshGenerator::new(&device, &queue).await;
+    let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
+    let meshgrid_buffers = meshgrid_generator.generate_buffers(2);
+    
+    // Inspect the meshgrid buffers
+    #[cfg(feature = "readback")]
+    {
+        meshgrid_generator.print_vertices(&meshgrid_buffers).await;
+        meshgrid_generator.print_indices(&meshgrid_buffers).await;
+    }
 }

@@ -16,6 +16,9 @@ futures = "0.3"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+readback = []
+
 [profile.release]
 opt-level = "z"
 lto = true
