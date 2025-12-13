@@ -15,6 +15,8 @@ pub struct Generator {
 pub struct GridBuffers {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
+    pub index_count: u32,
+    pub index_format: wgpu::IndexFormat,
 }
 
 impl Generator {
@@ -76,18 +78,18 @@ impl Generator {
     // TODO: Remove hardcoded values, but grid_chunks will always be 16x16
     pub fn generate_buffers(&self, grid_chunks: u64) -> GridBuffers {
         let grid_resolution = grid_chunks << 4;
-        let n_vertices = grid_resolution * grid_resolution;
+        let vertex_count = grid_resolution * grid_resolution;
 
         // TODO: Put this into a vertex attribute struct
         // All floats: x, y, z, r, g, b (TODO: x, y, z, nx, ny, nz) (leave final z zeroed)
-        let n_vertex_bytes = n_vertices * 4 * 6;
+        let vertex_byte_count = vertex_count * 4 * 6;
 
-        let n_indices = (grid_resolution - 1) * (grid_resolution - 1) * 6;
-        let n_index_bytes = n_indices * 4;
+        let index_count = (grid_resolution - 1) * (grid_resolution - 1) * 6;
+        let index_byte_count = index_count * 4;
 
         let vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: n_vertex_bytes,
+            size: vertex_byte_count,
             usage: wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::STORAGE
@@ -97,7 +99,7 @@ impl Generator {
 
         let index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: n_index_bytes,
+            size: index_byte_count,
             usage: wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::STORAGE
@@ -150,6 +152,8 @@ impl Generator {
         GridBuffers {
             vertex_buffer,
             index_buffer,
+            index_count: index_count as u32,
+            index_format: wgpu::IndexFormat::Uint32,
         }
     }
 

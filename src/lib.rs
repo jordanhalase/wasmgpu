@@ -33,7 +33,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     let window = web_sys::window().expect("No window found");
     let document = window.document().expect("No document found");
     let canvas = document
-        .get_element_by_id(&canvas_id)
+        .get_element_by_id(canvas_id)
         .expect("No element found")
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .expect("Element is not HTMLCanvasElement");
@@ -160,18 +160,14 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         render_pass.set_vertex_buffer(0, meshgrid_buffers.vertex_buffer.slice(..));
         render_pass.set_index_buffer(
             meshgrid_buffers.index_buffer.slice(..),
-            wgpu::IndexFormat::Uint32,
+            meshgrid_buffers.index_format,
         );
-        render_pass.draw_indexed(
-            0..(meshgrid_buffers.index_buffer.size() / 4) as u32,
-            0,
-            0..1,
-        );
+        render_pass.draw_indexed(0..meshgrid_buffers.index_count, 0, 0..1);
     }
 
     let command_buffer = encoder.finish();
     queue.submit([command_buffer]);
     output.present();
 
-    info!("{}, {}", width, height);
+    info!("Screen resolution: {width}, {height}");
 }
