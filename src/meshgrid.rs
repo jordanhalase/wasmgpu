@@ -123,8 +123,9 @@ impl Generator {
             }],
         });
 
-        let mut encoder =
-            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -163,8 +164,16 @@ impl Generator {
             mapped_at_creation: false,
         });
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        encoder.copy_buffer_to_buffer(&buffers.vertex_buffer, 0, &staging_buffer, 0, n_staging_bytes);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        encoder.copy_buffer_to_buffer(
+            &buffers.vertex_buffer,
+            0,
+            &staging_buffer,
+            0,
+            n_staging_bytes,
+        );
         self.queue.submit([encoder.finish()]);
 
         info!("Mapping vertex bufffer");
@@ -197,8 +206,16 @@ impl Generator {
             mapped_at_creation: false,
         });
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        encoder.copy_buffer_to_buffer(&buffers.index_buffer, 0, &staging_buffer, 0, n_staging_bytes);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        encoder.copy_buffer_to_buffer(
+            &buffers.index_buffer,
+            0,
+            &staging_buffer,
+            0,
+            n_staging_bytes,
+        );
         self.queue.submit([encoder.finish()]);
 
         info!("Mapping index bufffer");

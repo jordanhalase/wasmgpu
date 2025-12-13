@@ -93,7 +93,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
 
     let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
     let meshgrid_buffers = meshgrid_generator.generate_buffers(2);
-    
+
     // Inspect the meshgrid buffers
     #[cfg(feature = "readback")]
     {
