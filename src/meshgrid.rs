@@ -1,15 +1,18 @@
 #[cfg(feature = "readback")]
 use log::info;
 
+use bytemuck::bytes_of;
+use core::ops::Range;
+
 use wgpu::{self, include_wgsl};
 
 pub struct Generator {
     device: wgpu::Device,
     queue: wgpu::Queue,
     compute_bind_group_layout: wgpu::BindGroupLayout,
-    compute_pipeline_layout: wgpu::PipelineLayout,
     gen_vertex_pipeline: wgpu::ComputePipeline,
     gen_index_pipeline: wgpu::ComputePipeline,
+    uniform_buffer: wgpu::Buffer,
 }
 
 pub struct GridBuffers {
@@ -19,21 +22,43 @@ pub struct GridBuffers {
     pub index_format: wgpu::IndexFormat,
 }
 
+/// The `x_range` and `y_range` are half-open [a, b) to preserve a definite
+/// zero axis within the meshgrid.
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct GeneratorUniform {
+    resolution: [u32; 2],
+    x_range: [f32; 2],
+    y_range: [f32; 2],
+}
+
 impl Generator {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
         let compute_pipeline_layout =
@@ -65,31 +90,49 @@ impl Generator {
             cache: None,
         });
 
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: core::mem::size_of::<GeneratorUniform>() as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: false,
+        });
+
         Self {
             device: device.clone(),
             queue: queue.clone(),
             compute_bind_group_layout,
-            compute_pipeline_layout,
             gen_vertex_pipeline,
             gen_index_pipeline,
+            uniform_buffer,
         }
     }
 
-    // TODO: Remove hardcoded values, but grid_chunks will always be 16x16
-    pub fn generate_buffers(&self, grid_chunks: u64) -> GridBuffers {
-        let grid_resolution = grid_chunks << 4;
-        let vertex_count = grid_resolution * grid_resolution;
-
-        // TODO: Put this into a vertex attribute struct
-        // All floats: x, y, z, r, g, b (TODO: x, y, z, nx, ny, nz) (leave final z zeroed)
+    // `grid_chunks` is resolution in 16x16 chunks
+    pub fn generate_buffers(
+        &self,
+        grid_chunks: (u32, u32),
+        x_range: Range<f32>,
+        y_range: Range<f32>,
+    ) -> GridBuffers {
+        let grid_resolution = (grid_chunks.0 << 4, grid_chunks.1 << 4);
+        let vertex_count = grid_resolution.0 * grid_resolution.1;
         let vertex_byte_count = vertex_count * 4 * 6;
 
-        let index_count = (grid_resolution - 1) * (grid_resolution - 1) * 6;
+        let index_count = (grid_resolution.0 - 1) * (grid_resolution.1 - 1) * 6;
         let index_byte_count = index_count * 4;
+
+        let uniform_data = GeneratorUniform {
+            resolution: [grid_resolution.0, grid_resolution.1],
+            x_range: [x_range.start, x_range.end],
+            y_range: [y_range.start, y_range.end],
+        };
+
+        self.queue
+            .write_buffer(&self.uniform_buffer, 0, bytes_of(&uniform_data));
 
         let vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: vertex_byte_count,
+            size: vertex_byte_count as u64,
             usage: wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::STORAGE
@@ -99,7 +142,7 @@ impl Generator {
 
         let index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: index_byte_count,
+            size: index_byte_count as u64,
             usage: wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::STORAGE
@@ -110,19 +153,31 @@ impl Generator {
         let gen_vertex_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.compute_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: vertex_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: vertex_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let gen_index_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.compute_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: index_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: index_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let mut encoder = self
@@ -135,24 +190,22 @@ impl Generator {
                 timestamp_writes: None,
             });
 
-            // TODO: Do not hardcode dispatch numbers
-
             // Generate vertex buffer
             pass.set_pipeline(&self.gen_vertex_pipeline);
             pass.set_bind_group(0, &gen_vertex_bind_group, &[]);
-            pass.dispatch_workgroups(2, 2, 1); // 16x16 workgroup size
+            pass.dispatch_workgroups(grid_chunks.0, grid_chunks.1, 1);
 
             // Generate index buffer in same compute pass (optimal)
             pass.set_pipeline(&self.gen_index_pipeline);
             pass.set_bind_group(0, &gen_index_bind_group, &[]);
-            pass.dispatch_workgroups(2, 2, 1); // 16x16 workgroup size
+            pass.dispatch_workgroups(grid_chunks.0, grid_chunks.1, 1);
         }
         self.queue.submit([encoder.finish()]);
 
         GridBuffers {
             vertex_buffer,
             index_buffer,
-            index_count: index_count as u32,
+            index_count,
             index_format: wgpu::IndexFormat::Uint32,
         }
     }

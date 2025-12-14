@@ -74,7 +74,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     // Create a compute pipeline
 
     let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
-    let meshgrid_buffers = meshgrid_generator.generate_buffers(2);
+    let meshgrid_buffers = meshgrid_generator.generate_buffers((2, 2), -1.0..1.0, -1.0..1.0);
 
     // Inspect the meshgrid buffers
     #[cfg(feature = "readback")]
