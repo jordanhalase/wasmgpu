@@ -12,6 +12,15 @@
         import init, { start_webgpu_app } from "./pkg/wasmgpu.js";
 
         async function run() {
+            if (!('gpu' in navigator)) {
+                alert("This browser does not support WebGPU");
+                return;
+            }
+            if (typeof WebAssembly === 'undefined') {
+                alert("This browser does not support WebAssembly");
+                return;
+            }
+
             await init();
             await start_webgpu_app("canvas");
         }
