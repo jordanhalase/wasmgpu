@@ -22,8 +22,6 @@ pub struct GridBuffers {
     pub index_format: wgpu::IndexFormat,
 }
 
-/// The `x_range` and `y_range` are half-open [a, b) to preserve a definite
-/// zero axis within the meshgrid.
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct GeneratorUniform {
