@@ -2,7 +2,7 @@
 use log::info;
 
 use bytemuck::bytes_of;
-use core::ops::Range;
+use core::ops::{Range, RangeInclusive};
 
 use wgpu::{self, include_wgsl};
 
@@ -110,8 +110,8 @@ impl Generator {
     pub fn generate_buffers(
         &self,
         grid_resolution: (u32, u32),
-        x_range: Range<f32>,
-        y_range: Range<f32>,
+        x_range: RangeInclusive<f32>,
+        y_range: RangeInclusive<f32>,
     ) -> GridBuffers {
         let grid_leftover = (grid_resolution.0 & 0xf, grid_resolution.1 & 0xf);
         let grid_chunks = {
@@ -136,8 +136,8 @@ impl Generator {
 
         let uniform_data = GeneratorUniform {
             resolution: [grid_resolution.0, grid_resolution.1],
-            x_range: [x_range.start, x_range.end],
-            y_range: [y_range.start, y_range.end],
+            x_range: [*x_range.start(), *x_range.end()],
+            y_range: [*y_range.start(), *y_range.end()],
         };
 
         self.queue
