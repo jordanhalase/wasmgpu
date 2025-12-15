@@ -2,7 +2,7 @@
 use log::info;
 
 use bytemuck::bytes_of;
-use core::ops::{Range, RangeInclusive};
+use core::ops::RangeInclusive;
 
 use wgpu::{self, include_wgsl};
 
