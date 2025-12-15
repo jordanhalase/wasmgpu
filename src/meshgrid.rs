@@ -107,14 +107,27 @@ impl Generator {
         }
     }
 
-    // `grid_chunks` is resolution in 16x16 chunks
     pub fn generate_buffers(
         &self,
-        grid_chunks: (u32, u32),
+        grid_resolution: (u32, u32),
         x_range: Range<f32>,
         y_range: Range<f32>,
     ) -> GridBuffers {
-        let grid_resolution = (grid_chunks.0 << 4, grid_chunks.1 << 4);
+        let grid_leftover = (grid_resolution.0 & 0xf, grid_resolution.1 & 0xf);
+        let grid_chunks = {
+            let width = if grid_leftover.0 > 0 {
+                (grid_resolution.0 >> 4) + 1
+            } else {
+                grid_resolution.0 >> 4
+            };
+            let height = if grid_leftover.1 > 0 {
+                (grid_resolution.1 >> 4) + 1
+            } else {
+                grid_resolution.1 >> 4
+            };
+            (width, height)
+        };
+
         let vertex_count = grid_resolution.0 * grid_resolution.1;
         let vertex_byte_count = vertex_count * 4 * 6;
 
