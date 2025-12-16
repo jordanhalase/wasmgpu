@@ -95,17 +95,20 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         .get_current_texture()
         .expect("Could not get current texture");
 
-    let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("Camera bind group layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
+    let camera_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Camera bind group layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
                 count: None,
-            },
-        ],
-    });
+            }],
+        });
 
     // TODO: Look-at and perspective projection
     //let view = glam::Mat4::look_at_rh(Vec3::new(8.0, 0.0, 0.25), Vec3::new(0.0, 0.0, 0.25), Vec3::new(0.0, 1.0, 0.0));
@@ -122,12 +125,10 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("Camera bind group"),
         layout: &camera_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(mpv_uniform.as_entire_buffer_binding()),
-            },
-        ],
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::Buffer(mpv_uniform.as_entire_buffer_binding()),
+        }],
     });
 
     let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
@@ -177,8 +178,9 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     });
 
     // Render image (simplified)
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Command encoder") });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Command encoder"),
+    });
     let view = output
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
