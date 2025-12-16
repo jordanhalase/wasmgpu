@@ -14,20 +14,20 @@ fn generate_index_buffer(@builtin(global_invocation_id) gid: vec3u)
 {
     // i0 i2 -> 0 1 2 2 1 3
     // i1 i3
-    let i0: u32 = (gid.y*grid.resolution.x + gid.x);
-    let i1: u32 = (i0 + grid.resolution.x);
+    let i0: u32 = (gid.y*grid.resolution.y + gid.x);
+    let i1: u32 = (i0 + grid.resolution.y);
     let i2: u32 = (i0 + 1);
 
-    if (gid.x + 1 >= grid.resolution.x) {
+    if (gid.x + 1 >= grid.resolution.y) {
         return;
     }
 
-    if (gid.y + grid.resolution.x >= grid.resolution.x*grid.resolution.y) {
+    if (gid.y + grid.resolution.y >= grid.resolution.x*grid.resolution.y) {
         return;
     }
 
     let i3: u32 = i1 + 1;
-    let e = ELEMENT_SIZE * (gid.y*(grid.resolution.x - 1) + gid.x);
+    let e = ELEMENT_SIZE * (gid.y*(grid.resolution.y - 1) + gid.x);
     if ((e + ELEMENT_SIZE) > arrayLength(&index_buffer)) {
         return;
     }
