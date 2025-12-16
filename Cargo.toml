@@ -12,6 +12,7 @@ log = "0.4"
 console_log = "1"
 bytemuck = "1.24"
 futures = "0.3"
+glam = { version = "0.30", features = ["bytemuck"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
