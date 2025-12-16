@@ -23,7 +23,7 @@ fn generate_vertex_buffer(@builtin(global_invocation_id) gid: vec3u)
     vertex_buffer[e    ] = mix(grid.x_range.x, grid.x_range.y, f32(gid.y)/f32(grid.resolution.x-1));
     vertex_buffer[e + 1] = mix(grid.y_range.x, grid.y_range.y, f32(gid.x)/f32(grid.resolution.y-1));
     vertex_buffer[e + 2] = 0.0;
-    vertex_buffer[e + 3] = f32(gid.x)/f32(grid.resolution.x-1);
-    vertex_buffer[e + 4] = f32(gid.y)/f32(grid.resolution.y-1);
+    vertex_buffer[e + 3] = f32(gid.x)/f32(grid.resolution.y-1);
+    vertex_buffer[e + 4] = f32(gid.y)/f32(grid.resolution.x-1);
     vertex_buffer[e + 5] = 0.0;
 }
