@@ -1,6 +1,6 @@
 #![no_std]
 
-use glam::Vec3;
+use glam::{Mat4, Vec3};
 use log::info;
 use wasm_bindgen::prelude::*;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -76,7 +76,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     // Create a compute pipeline
 
     let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
-    let meshgrid_buffers = meshgrid_generator.generate_buffers((5, 5), -1.0..=1.0, -1.0..=1.0);
+    let meshgrid_buffers = meshgrid_generator.generate_buffers((5, 5), -5.0..=5.0, -5.0..=5.0);
 
     // Inspect the meshgrid buffers
     #[cfg(feature = "readback")]
@@ -111,10 +111,10 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         });
 
     // TODO: Look-at and perspective projection
-    //let view = glam::Mat4::look_at_rh(Vec3::new(8.0, 0.0, 0.25), Vec3::new(0.0, 0.0, 0.25), Vec3::new(0.0, 1.0, 0.0));
-    //let perspective = glam::Mat4::perspective_rh(f32::to_radians(90.0), 4.0/3.0, 0.1, 2.0);
-    //let mvp = perspective * view;
-    let mvp = glam::Mat4::IDENTITY;
+    let view = Mat4::look_at_rh(Vec3::new(4.0, -8.0, 8.0), Vec3::new(0.0, 0.0, 0.25), Vec3::Z);
+    let perspective = Mat4::perspective_rh(f32::to_radians(90.0), 4.0/3.0, 0.1, 100.0);
+    let mvp = perspective * view;
+    //let mvp = glam::Mat4::IDENTITY;
 
     let mpv_uniform = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("MVP uniform"),
@@ -141,7 +141,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
 
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render pipeline"),
-        layout: Some(&render_pipeline_layout), // TODO
+        layout: Some(&render_pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: Some("vs_main"),
@@ -192,7 +192,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: wgpu::StoreOp::Store,
                 },
             })],
