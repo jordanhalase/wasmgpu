@@ -2,6 +2,7 @@
 name = "wasmgpu"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 wgpu = { version = "27", default-features = false, features = ["webgpu", "wgsl"] }
