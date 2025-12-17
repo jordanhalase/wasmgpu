@@ -140,6 +140,42 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         }],
     });
 
+    // TODO: Overkill?
+    let depth_format = wgpu::TextureFormat::Depth32Float;
+
+    let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: depth_format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+
+    let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    /*let depth_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: None,
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        compare: Some(wgpu::CompareFunction::LessEqual),
+        lod_min_clamp: 0.0,
+        lod_max_clamp: 100.0,
+        ..Default::default()
+    });*/
+
+    // TODO: Group these depth objects somehow
+
     let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -176,7 +212,13 @@ pub async fn start_webgpu_app(canvas_id: &str) {
             unclipped_depth: false,
             conservative: false,
         },
-        depth_stencil: None,
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: depth_format,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,
@@ -205,7 +247,14 @@ pub async fn start_webgpu_app(canvas_id: &str) {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
             timestamp_writes: None,
             occlusion_query_set: None,
         });
