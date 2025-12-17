@@ -76,7 +76,12 @@ pub async fn start_webgpu_app(canvas_id: &str) {
     // Create a compute pipeline
 
     let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
-    let meshgrid_buffers = meshgrid_generator.generate_buffers((5, 5), -5.0..=5.0, -5.0..=5.0);
+    let meshgrid_buffers = meshgrid_generator.generate_buffers((31, 31), -5.0..=5.0, -5.0..=5.0);
+
+    let evaluator_module = device.create_shader_module(wgpu::include_wgsl!("evaluator.wgsl"));
+    let evaluator = meshgrid_generator.create_evaluator(&evaluator_module, Some("evaluate"));
+
+    evaluator.evaluate_buffers(&[&meshgrid_buffers]);
 
     // Inspect the meshgrid buffers
     #[cfg(feature = "readback")]
@@ -111,8 +116,12 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         });
 
     // TODO: Look-at and perspective projection
-    let view = Mat4::look_at_rh(Vec3::new(4.0, -8.0, 8.0), Vec3::new(0.0, 0.0, 0.25), Vec3::Z);
-    let perspective = Mat4::perspective_rh(f32::to_radians(90.0), 4.0/3.0, 0.1, 100.0);
+    let view = Mat4::look_at_rh(
+        Vec3::new(4.0, -8.0, 8.0),
+        Vec3::new(0.0, 0.0, 0.25),
+        Vec3::Z,
+    );
+    let perspective = Mat4::perspective_rh(f32::to_radians(90.0), 4.0 / 3.0, 0.1, 100.0);
     let mvp = perspective * view;
     //let mvp = glam::Mat4::IDENTITY;
 

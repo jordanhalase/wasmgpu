@@ -13,6 +13,8 @@ pub struct Generator {
     gen_vertex_pipeline: wgpu::ComputePipeline,
     gen_index_pipeline: wgpu::ComputePipeline,
     uniform_buffer: wgpu::Buffer,
+    evaluator_pipeline_layout: wgpu::PipelineLayout,
+    evaluator_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 pub struct GridBuffers {
@@ -20,6 +22,7 @@ pub struct GridBuffers {
     pub index_buffer: wgpu::Buffer,
     pub index_count: u32,
     pub index_format: wgpu::IndexFormat,
+    evaluator_bind_group: wgpu::BindGroup,
 }
 
 #[repr(C)]
@@ -95,6 +98,28 @@ impl Generator {
             mapped_at_creation: false,
         });
 
+        let evaluator_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let evaluator_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&evaluator_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
         Self {
             device: device.clone(),
             queue: queue.clone(),
@@ -102,6 +127,8 @@ impl Generator {
             gen_vertex_pipeline,
             gen_index_pipeline,
             uniform_buffer,
+            evaluator_pipeline_layout,
+            evaluator_bind_group_layout,
         }
     }
 
@@ -213,11 +240,43 @@ impl Generator {
         }
         self.queue.submit([encoder.finish()]);
 
+        let evaluator_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.evaluator_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: vertex_buffer.as_entire_binding(),
+            }],
+        });
+
         GridBuffers {
+            evaluator_bind_group,
             vertex_buffer,
             index_buffer,
             index_count,
             index_format: wgpu::IndexFormat::Uint32,
+        }
+    }
+
+    pub fn create_evaluator(
+        &self,
+        module: &wgpu::ShaderModule,
+        entry_point: Option<&str>,
+    ) -> Evaluator {
+        let evaluator_pipeline =
+            self.device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: Some(&self.evaluator_pipeline_layout),
+                    module,
+                    entry_point,
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    cache: None,
+                });
+        Evaluator {
+            device: self.device.clone(),
+            queue: self.queue.clone(),
+            evaluator_pipeline,
         }
     }
 
@@ -244,7 +303,7 @@ impl Generator {
         );
         self.queue.submit([encoder.finish()]);
 
-        info!("Mapping vertex bufffer");
+        info!("Mapping vertex buffer");
 
         let (tx, rx) = futures::channel::oneshot::channel();
         staging_buffer.map_async(wgpu::MapMode::Read, 0..n_staging_bytes, move |res| {
@@ -286,7 +345,7 @@ impl Generator {
         );
         self.queue.submit([encoder.finish()]);
 
-        info!("Mapping index bufffer");
+        info!("Mapping index buffer");
 
         let (tx, rx) = futures::channel::oneshot::channel();
         staging_buffer.map_async(wgpu::MapMode::Read, 0..n_staging_bytes, move |res| {
@@ -303,5 +362,34 @@ impl Generator {
             }
         }
         staging_buffer.unmap();
+    }
+}
+
+pub struct Evaluator {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    evaluator_pipeline: wgpu::ComputePipeline,
+}
+
+impl Evaluator {
+    pub fn evaluate_buffers(&self, grid_buffers: &[&GridBuffers]) {
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                timestamp_writes: None,
+            });
+
+            // Evaluate vertex buffers
+            for &grid_buffer in grid_buffers {
+                pass.set_pipeline(&self.evaluator_pipeline);
+                pass.set_bind_group(0, &grid_buffer.evaluator_bind_group, &[]);
+                pass.dispatch_workgroups(256, 1, 1);
+            }
+        }
+        self.queue.submit([encoder.finish()]);
     }
 }
