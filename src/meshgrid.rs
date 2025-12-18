@@ -22,6 +22,7 @@ pub struct GridBuffers {
     pub index_buffer: wgpu::Buffer,
     pub index_count: u32,
     pub index_format: wgpu::IndexFormat,
+    evaluator_dispatch_count: u32,
     evaluator_bind_group: wgpu::BindGroup,
 }
 
@@ -249,11 +250,18 @@ impl Generator {
             }],
         });
 
+        let evaluator_dispatch_count = if vertex_count & 0xff > 0 {
+            (vertex_count >> 8) + 1
+        } else {
+            vertex_count >> 8
+        };
+
         GridBuffers {
             evaluator_bind_group,
             vertex_buffer,
             index_buffer,
             index_count,
+            evaluator_dispatch_count,
             index_format: wgpu::IndexFormat::Uint32,
         }
     }
@@ -387,7 +395,7 @@ impl Evaluator {
             for &grid_buffer in grid_buffers {
                 pass.set_pipeline(&self.evaluator_pipeline);
                 pass.set_bind_group(0, &grid_buffer.evaluator_bind_group, &[]);
-                pass.dispatch_workgroups(256, 1, 1);
+                pass.dispatch_workgroups(grid_buffer.evaluator_dispatch_count, 1, 1);
             }
         }
         self.queue.submit([encoder.finish()]);
