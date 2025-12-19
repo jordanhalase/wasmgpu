@@ -11,31 +11,49 @@
 <body>
     <canvas id="canvas" width="1024" height="768"></canvas>
     <script type="module">
-        import init, { start_webgpu_app, resize, render } from "./pkg/wasmgpu.js";
+        import init, { start_webgpu_app, resize, render, rotate_z } from "./pkg/wasmgpu.js";
+
+        let mouseDragging = false;
 
         async function run() {
-            /*if (!('gpu' in navigator)) {
+            if (!('gpu' in navigator)) {
                 alert("This browser does not support WebGPU");
                 return;
             }
             if (typeof WebAssembly === 'undefined') {
                 alert("This browser does not support WebAssembly");
                 return;
-            }*/
+            }
 
             await init();
             let state = await start_webgpu_app(canvas);
             render(state);
 
-            // TODO: Detect these in JS and handle in Rust
-            /*canvas.addEventListener('mousedown', (e) => {
-                console.log('canvas mousedown', { x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY });
-            });
-
             canvas.addEventListener('mousemove', (e) => {
-                console.log('canvas mousemove', { x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY });
+                if (mouseDragging) {
+                    rotate_z(state, -e.movementX / canvas.width);
+                    render(state);
+                }
             });
 
+            canvas.addEventListener('mousedown', (e) => {
+                mouseDragging = true;
+                canvas.classList.add('no-cursor');
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                mouseDragging = false;
+            });
+
+            // TODO: Touch is more complicated
+            document.addEventListener('touchmove', (e) => {
+                let clientPos = e.touches ? e.touches[0] : e;
+                rotate_z(state, -clientPos.clientX / canvas.width);
+                render(state);
+            }, { passive: false });
+
+            // TODO: Detect these in JS and handle in Rust
+            /*
             canvas.addEventListener('wheel', (e) => {
                 console.log('canvas wheel', { deltaY: e.deltaY, ctrlKey: e.ctrlKey });
             });*/

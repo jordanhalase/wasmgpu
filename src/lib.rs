@@ -10,6 +10,30 @@ use wgpu::{
 
 mod meshgrid;
 
+struct Camera {
+    eye: Vec3,
+    target: Vec3,
+    aspect: f32,
+    fovy: f32,
+    znear: f32,
+    zfar: f32,
+}
+
+impl Camera {
+    const UP: Vec3 = Vec3::Z;
+
+    fn view_proj(&self) -> Mat4 {
+        let view = Mat4::look_at_rh(self.eye, self.target, Self::UP);
+        let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
+        proj * view
+    }
+
+    /// Rotate about the z axis in radians
+    fn rotate_z(&mut self, angle: f32) {
+        self.eye = self.eye.rotate_z(angle); // TODO: Normalize to constant magnitude
+    }
+}
+
 #[wasm_bindgen]
 pub struct State {
     surface: Surface<'static>,
@@ -20,6 +44,8 @@ pub struct State {
     depth_texture: wgpu::Texture,
     depth_texture_view: wgpu::TextureView,
     render_pipeline: wgpu::RenderPipeline,
+    camera: Camera,
+    camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 }
 
@@ -81,6 +107,11 @@ impl State {
             let (tex, view) = Self::configure_depth_texture(&self.device, width, height);
             self.depth_texture = tex;
             self.depth_texture_view = view;
+
+            self.camera.aspect = width as f32 / height as f32;
+            let camera_uniform = self.camera.view_proj();
+            self.queue
+                .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
         }
     }
 
@@ -89,8 +120,6 @@ impl State {
             .surface
             .get_current_texture()
             .expect("Could not get current texture");
-
-        //let
 
         let mut encoder = self
             .device
@@ -138,6 +167,13 @@ impl State {
         self.queue.submit([command_buffer]);
         output.present();
     }
+
+    pub fn rotate_z(&mut self, angle: f32) {
+        self.camera.rotate_z(angle);
+        let camera_uniform = self.camera.view_proj();
+        self.queue
+            .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
+    }
 }
 
 #[repr(C)]
@@ -173,6 +209,11 @@ pub fn resize(s: &mut State, width: u32, height: u32) {
 #[wasm_bindgen]
 pub fn render(s: &mut State) {
     s.render();
+}
+
+#[wasm_bindgen]
+pub fn rotate_z(s: &mut State, angle: f32) {
+    s.rotate_z(angle * core::f32::consts::PI);
 }
 
 #[wasm_bindgen]
@@ -251,19 +292,20 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
             }],
         });
 
-    // TODO: Look-at and perspective projection
-    let view = Mat4::look_at_rh(
-        Vec3::new(4.0, -8.0, 8.0),
-        Vec3::new(0.0, 0.0, 0.25),
-        Vec3::Z,
-    );
-    let perspective = Mat4::perspective_rh(f32::to_radians(90.0), 4.0 / 3.0, 0.1, 100.0);
-    let mvp = perspective * view;
-    //let mvp = glam::Mat4::IDENTITY;
+    let camera = Camera {
+        eye: Vec3::new(4.0, -8.0, 8.0),
+        target: Vec3::ZERO,
+        aspect: width as f32 / height as f32,
+        fovy: f32::to_radians(90.0),
+        znear: 0.1,
+        zfar: 100.0,
+    };
 
-    let mpv_uniform = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("MVP uniform"),
-        contents: bytemuck::bytes_of(&mvp),
+    let camera_uniform: Mat4 = camera.view_proj();
+
+    let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Camera buffer"),
+        contents: bytemuck::bytes_of(&camera_uniform),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
     });
 
@@ -272,7 +314,7 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
         layout: &camera_bind_group_layout,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
-            resource: wgpu::BindingResource::Buffer(mpv_uniform.as_entire_buffer_binding()),
+            resource: wgpu::BindingResource::Buffer(camera_buffer.as_entire_buffer_binding()),
         }],
     });
 
@@ -340,6 +382,8 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
         depth_texture,
         depth_texture_view,
         render_pipeline,
+        camera,
+        camera_buffer,
         camera_bind_group,
     }
 }
