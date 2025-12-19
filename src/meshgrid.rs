@@ -38,7 +38,7 @@ impl Generator {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some("Generator compute bind group layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -65,7 +65,7 @@ impl Generator {
 
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
+                label: Some("Generator compute pipeline layout"),
                 bind_group_layouts: &[&compute_bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -75,7 +75,7 @@ impl Generator {
 
         let gen_vertex_pipeline =
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
+                label: Some("Generator compute vertex pipeline"),
                 layout: Some(&compute_pipeline_layout),
                 module: &gen_vertex_module,
                 entry_point: Some("generate_vertex_buffer"),
@@ -84,7 +84,7 @@ impl Generator {
             });
 
         let gen_index_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
+            label: Some("Generator compute index pipeline"),
             layout: Some(&compute_pipeline_layout),
             module: &gen_index_module,
             entry_point: Some("generate_index_buffer"),
@@ -93,7 +93,7 @@ impl Generator {
         });
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+            label: Some("Generator uniform buffer"),
             size: core::mem::size_of::<GeneratorUniform>() as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
             mapped_at_creation: false,
@@ -101,7 +101,7 @@ impl Generator {
 
         let evaluator_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some("Evaluator bind group layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -116,7 +116,7 @@ impl Generator {
 
         let evaluator_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
+                label: Some("Evaluator pipeline layout"),
                 bind_group_layouts: &[&evaluator_bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -170,7 +170,7 @@ impl Generator {
             .write_buffer(&self.uniform_buffer, 0, bytes_of(&uniform_data));
 
         let vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+            label: Some("GridBuffer vertex buffer"),
             size: vertex_byte_count as u64,
             usage: wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST
@@ -180,7 +180,7 @@ impl Generator {
         });
 
         let index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+            label: Some("GridBuffer index buffer"),
             size: index_byte_count as u64,
             usage: wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST
@@ -190,7 +190,7 @@ impl Generator {
         });
 
         let gen_vertex_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
+            label: Some("Generator vertex bind group"),
             layout: &self.compute_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -205,7 +205,7 @@ impl Generator {
         });
 
         let gen_index_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
+            label: Some("Generator index bind group"),
             layout: &self.compute_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -225,7 +225,7 @@ impl Generator {
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: None,
+                label: Some("Generator compute pass"),
                 timestamp_writes: None,
             });
 
@@ -242,7 +242,7 @@ impl Generator {
         self.queue.submit([encoder.finish()]);
 
         let evaluator_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
+            label: Some("Evaluator bind group"),
             layout: &self.evaluator_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -274,7 +274,7 @@ impl Generator {
         let evaluator_pipeline =
             self.device
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: None,
+                    label: Some("Evaluator compute pipeline"),
                     layout: Some(&self.evaluator_pipeline_layout),
                     module,
                     entry_point,
@@ -383,11 +383,13 @@ impl Evaluator {
     pub fn evaluate_buffers(&self, grid_buffers: &[&GridBuffers]) {
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Evaluator encoder"),
+            });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: None,
+                label: Some("Evaluator compute pass"),
                 timestamp_writes: None,
             });
 

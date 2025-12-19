@@ -1,31 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebGPU</title>
     <!--link rel="stylesheet" href="style.css" type="text/css"-->
 </head>
+
 <body>
     <canvas id="canvas" width="1024" height="768"></canvas>
     <script type="module">
-        import init, { start_webgpu_app } from "./pkg/wasmgpu.js";
+        import init, { start_webgpu_app, resize, render } from "./pkg/wasmgpu.js";
 
         async function run() {
-            if (!('gpu' in navigator)) {
+            /*if (!('gpu' in navigator)) {
                 alert("This browser does not support WebGPU");
                 return;
             }
             if (typeof WebAssembly === 'undefined') {
                 alert("This browser does not support WebAssembly");
                 return;
-            }
+            }*/
 
             await init();
-            await start_webgpu_app("canvas");
+            let state = await start_webgpu_app(canvas);
+            render(state);
+
+            // TODO: Detect these in JS and handle in Rust
+            /*canvas.addEventListener('mousedown', (e) => {
+                console.log('canvas mousedown', { x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY });
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                console.log('canvas mousemove', { x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY });
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                console.log('canvas wheel', { deltaY: e.deltaY, ctrlKey: e.ctrlKey });
+            });*/
         }
 
         run();
     </script>
 </body>
+
 </html>

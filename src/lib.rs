@@ -1,11 +1,144 @@
 #![no_std]
 
 use glam::{Mat4, Vec3};
-use log::info;
 use wasm_bindgen::prelude::*;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use web_sys::HtmlCanvasElement;
+use wgpu::{
+    Surface,
+    util::{BufferInitDescriptor, DeviceExt},
+};
 
 mod meshgrid;
+
+#[wasm_bindgen]
+pub struct State {
+    surface: Surface<'static>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    meshgrid_buffers: meshgrid::GridBuffers,
+    depth_texture: wgpu::Texture,
+    depth_texture_view: wgpu::TextureView,
+    render_pipeline: wgpu::RenderPipeline,
+    camera_bind_group: wgpu::BindGroup,
+}
+
+impl State {
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    // This is an associated function because if it took &self then it would not be callable from the constructor
+    #[must_use]
+    pub fn configure_depth_texture(
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Depth texture view"),
+            ..Default::default()
+        });
+
+        // TODO: Group these depth objects somehow
+        /*let depth_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: None,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });*/
+        (depth_texture, depth_texture_view)
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            self.config.width = width;
+            self.config.height = height;
+            self.surface.configure(&self.device, &self.config);
+
+            // More efficient to explicitly destory here than rely on Drop
+            self.depth_texture.destroy();
+            let (tex, view) = Self::configure_depth_texture(&self.device, width, height);
+            self.depth_texture = tex;
+            self.depth_texture_view = view;
+        }
+    }
+
+    pub fn render(&mut self) {
+        let output = self
+            .surface
+            .get_current_texture()
+            .expect("Could not get current texture");
+
+        //let
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Command encoder"),
+            });
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.meshgrid_buffers.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                self.meshgrid_buffers.index_buffer.slice(..),
+                self.meshgrid_buffers.index_format,
+            );
+            render_pass.draw_indexed(0..self.meshgrid_buffers.index_count, 0, 0..1);
+        }
+
+        let command_buffer = encoder.finish();
+        self.queue.submit([command_buffer]);
+        output.present();
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -29,18 +162,23 @@ impl Vertex {
     }
 }
 
-#[wasm_bindgen]
-pub async fn start_webgpu_app(canvas_id: &str) {
-    // Get the canvas element from the DOM
-    let window = web_sys::window().expect("No window found");
-    let document = window.document().expect("No document found");
-    let canvas = document
-        .get_element_by_id(canvas_id)
-        .expect("No element found")
-        .dyn_into::<web_sys::HtmlCanvasElement>()
-        .expect("Element is not HTMLCanvasElement");
+// Wasm bindgen doesn't like standalones in impls so we declare bare functions
+// Also could instead move them out of the impl but they make more sense there
 
+#[wasm_bindgen]
+pub fn resize(s: &mut State, width: u32, height: u32) {
+    s.resize(width, height);
+}
+
+#[wasm_bindgen]
+pub fn render(s: &mut State) {
+    s.render();
+}
+
+#[wasm_bindgen]
+pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
     console_log::init().expect("Could not initiate logging");
+    console_error_panic_hook::set_once();
 
     let width = canvas.width();
     let height = canvas.height();
@@ -96,9 +234,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         .expect("Surface not supported by adapter");
     surface.configure(&device, &config);
 
-    let output = surface
-        .get_current_texture()
-        .expect("Could not get current texture");
+    // TODO: Move render setup somewhere else
 
     let camera_bind_group_layout =
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -140,42 +276,6 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         }],
     });
 
-    // TODO: Overkill?
-    let depth_format = wgpu::TextureFormat::Depth32Float;
-
-    let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: depth_format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-
-    let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-    /*let depth_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: None,
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        compare: Some(wgpu::CompareFunction::LessEqual),
-        lod_min_clamp: 0.0,
-        lod_max_clamp: 100.0,
-        ..Default::default()
-    });*/
-
-    // TODO: Group these depth objects somehow
-
     let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -213,7 +313,7 @@ pub async fn start_webgpu_app(canvas_id: &str) {
             conservative: false,
         },
         depth_stencil: Some(wgpu::DepthStencilState {
-            format: depth_format,
+            format: State::DEPTH_FORMAT,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::Less,
             stencil: wgpu::StencilState::default(),
@@ -228,50 +328,18 @@ pub async fn start_webgpu_app(canvas_id: &str) {
         cache: None,
     });
 
-    // Render image (simplified)
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Command encoder"),
-    });
-    let view = output
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-    {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth_texture_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
+    let (depth_texture, depth_texture_view) =
+        State::configure_depth_texture(&device, width, height);
 
-        render_pass.set_pipeline(&render_pipeline);
-        render_pass.set_bind_group(0, &camera_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, meshgrid_buffers.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(
-            meshgrid_buffers.index_buffer.slice(..),
-            meshgrid_buffers.index_format,
-        );
-        render_pass.draw_indexed(0..meshgrid_buffers.index_count, 0, 0..1);
+    State {
+        surface,
+        device,
+        queue,
+        config,
+        meshgrid_buffers,
+        depth_texture,
+        depth_texture_view,
+        render_pipeline,
+        camera_bind_group,
     }
-
-    let command_buffer = encoder.finish();
-    queue.submit([command_buffer]);
-    output.present();
-
-    info!("Screen resolution: {width}, {height}");
 }

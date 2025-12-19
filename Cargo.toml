@@ -14,6 +14,7 @@ console_log = "1"
 bytemuck = "1.24"
 futures = "0.3"
 glam = { version = "0.30", features = ["bytemuck"] }
+console_error_panic_hook = "0.1"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -25,4 +26,4 @@ readback = []
 opt-level = "z"
 lto = true
 codegen-units = 1
-panic = "abort"
+#panic = "abort"
