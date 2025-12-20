@@ -75,7 +75,9 @@ pub struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    meshgrid_generator: meshgrid::Generator,
     meshgrid_buffers: meshgrid::GridBuffers,
+    evaluator: meshgrid::Evaluator,
     depth_texture: wgpu::Texture,
     depth_texture_view: wgpu::TextureView,
     render_pipeline_layout: wgpu::PipelineLayout,
@@ -207,7 +209,9 @@ impl State {
             device,
             queue,
             config,
+            meshgrid_generator,
             meshgrid_buffers,
+            evaluator,
             depth_texture,
             depth_texture_view,
             render_pipeline_layout,
@@ -367,6 +371,17 @@ impl State {
             self.queue
                 .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
         }
+    }
+
+    pub fn set_grid_resolution(&mut self, width: u32, height: u32) {
+        self.meshgrid_buffers.destroy();
+
+        let meshgrid_buffers =
+            self.meshgrid_generator
+                .generate_buffers((width, height), -5.0..=5.0, -5.0..=5.0);
+
+        self.evaluator.evaluate_buffers(&[&meshgrid_buffers]);
+        self.meshgrid_buffers = meshgrid_buffers;
     }
 
     pub fn render(&mut self) {
@@ -529,6 +544,11 @@ impl JsApp {
 
     pub fn set_multisampling_enabled(&mut self, enabled: bool) {
         self.inner.set_multisampling_enabled(enabled);
+        self.inner.render();
+    }
+
+    pub fn set_grid_resolution(&mut self, width: u32, height: u32) {
+        self.inner.set_grid_resolution(width, height);
         self.inner.render();
     }
 }

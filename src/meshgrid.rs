@@ -26,6 +26,13 @@ pub struct GridBuffers {
     evaluator_bind_group: wgpu::BindGroup,
 }
 
+impl GridBuffers {
+    pub fn destroy(&self) {
+        self.vertex_buffer.destroy();
+        self.index_buffer.destroy();
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct GeneratorUniform {
