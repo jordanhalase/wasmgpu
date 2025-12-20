@@ -70,7 +70,6 @@ impl Camera {
     }
 }
 
-#[wasm_bindgen]
 pub struct State {
     surface: Surface<'static>,
     device: wgpu::Device,
@@ -88,12 +87,172 @@ pub struct State {
 impl State {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+    pub async fn new(
+        width: u32,
+        height: u32,
+        adapter: wgpu::Adapter,
+        surface: wgpu::Surface<'static>,
+    ) -> Self {
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Device"),
+                required_features: wgpu::Features::default(),
+                required_limits: wgpu::Limits::defaults(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
+            .await
+            .expect("Could not create device");
+
+        // Create a compute pipeline
+
+        let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
+        let meshgrid_buffers =
+            meshgrid_generator.generate_buffers((255, 255), -5.0..=5.0, -5.0..=5.0);
+
+        let evaluator_module = device.create_shader_module(wgpu::include_wgsl!("evaluator.wgsl"));
+        let evaluator = meshgrid_generator.create_evaluator(&evaluator_module, Some("evaluate"));
+
+        evaluator.evaluate_buffers(&[&meshgrid_buffers]);
+
+        // Inspect the meshgrid buffers
+        #[cfg(feature = "readback")]
+        {
+            meshgrid_generator.print_vertices(&meshgrid_buffers).await;
+            meshgrid_generator.print_indices(&meshgrid_buffers).await;
+        }
+
+        // Configure the surface
+        let config = surface
+            .get_default_config(&adapter, width, height)
+            .expect("Surface not supported by adapter");
+        surface.configure(&device, &config);
+
+        // TODO: Move render setup somewhere else
+
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Camera bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let camera = Camera {
+            //eye: Vec3::new(4.0, -8.0, 8.0), // TODO: Remove
+            target: Vec3::ZERO,
+            distance: 12.0,
+            zenith: 0.841_068_7,
+            azimuth: 1.107_148_8,
+            aspect: width as f32 / height as f32,
+            fovy: f32::to_radians(90.0),
+            znear: 0.1,
+            zfar: 100.0,
+        };
+
+        let camera_uniform: Mat4 = camera.view_proj();
+
+        let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Camera buffer"),
+            contents: bytemuck::bytes_of(&camera_uniform),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Camera bind group"),
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(camera_buffer.as_entire_buffer_binding()),
+            }],
+        });
+
+        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render pipeline layout"),
+                bind_group_layouts: &[&camera_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Vertex::desc()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None, // Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: State::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        let (depth_texture, depth_texture_view) =
+            State::configure_depth_texture(&device, width, height, 1);
+
+        Self {
+            surface,
+            device,
+            queue,
+            config,
+            meshgrid_buffers,
+            depth_texture,
+            depth_texture_view,
+            render_pipeline,
+            camera,
+            camera_buffer,
+            camera_bind_group,
+        }
+    }
+
     // This is an associated function because if it took &self then it would not be callable from the constructor
     #[must_use]
     pub fn configure_depth_texture(
         device: &wgpu::Device,
         width: u32,
         height: u32,
+        sample_count: u32,
     ) -> (wgpu::Texture, wgpu::TextureView) {
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Depth texture"),
@@ -103,7 +262,7 @@ impl State {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -212,13 +371,6 @@ impl State {
         self.queue
             .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
     }
-
-    /*pub fn rotate_azimuth(&mut self, angle: f32) {
-        self.camera.rotate_azimuth(angle);
-        let camera_uniform = self.camera.view_proj();
-        self.queue
-            .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
-    }*/
 }
 
 #[repr(C)]
@@ -243,26 +395,29 @@ impl Vertex {
     }
 }
 
-// Wasm bindgen doesn't like standalones in impls so we declare bare functions
-// Also could instead move them out of the impl but they make more sense there
-
 #[wasm_bindgen]
-pub fn resize(s: &mut State, width: u32, height: u32) {
-    s.resize(width, height);
+pub struct JsApp {
+    inner: State,
 }
 
 #[wasm_bindgen]
-pub fn render(s: &mut State) {
-    s.render();
+impl JsApp {
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.inner.resize(width, height);
+    }
+
+    pub fn move_camera(&mut self, distance: f32, zenith: f32, azimuth: f32) {
+        self.inner.move_camera(distance, zenith * PI, azimuth * PI);
+    }
+
+    pub fn render(&mut self) {
+        self.inner.render();
+    }
 }
 
+// Wasm bindgen currently does not support async constructors
 #[wasm_bindgen]
-pub fn move_camera(s: &mut State, distance: f32, zenith: f32, azimuth: f32) {
-    s.move_camera(distance, zenith * PI, azimuth * PI);
-}
-
-#[wasm_bindgen]
-pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
+pub async fn start_app(canvas: HtmlCanvasElement) -> JsApp {
     console_log::init().expect("Could not initiate logging");
     console_error_panic_hook::set_once();
 
@@ -285,153 +440,7 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
         .await
         .expect("Could not get appropriate adapter");
 
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: Some("Device"),
-            required_features: wgpu::Features::default(),
-            required_limits: wgpu::Limits::defaults(),
-            experimental_features: wgpu::ExperimentalFeatures::disabled(),
-            memory_hints: wgpu::MemoryHints::default(),
-            trace: wgpu::Trace::Off,
-        })
-        .await
-        .expect("Could not create device");
-
-    // Create a compute pipeline
-
-    let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
-    let meshgrid_buffers = meshgrid_generator.generate_buffers((255, 255), -5.0..=5.0, -5.0..=5.0);
-
-    let evaluator_module = device.create_shader_module(wgpu::include_wgsl!("evaluator.wgsl"));
-    let evaluator = meshgrid_generator.create_evaluator(&evaluator_module, Some("evaluate"));
-
-    evaluator.evaluate_buffers(&[&meshgrid_buffers]);
-
-    // Inspect the meshgrid buffers
-    #[cfg(feature = "readback")]
-    {
-        meshgrid_generator.print_vertices(&meshgrid_buffers).await;
-        meshgrid_generator.print_indices(&meshgrid_buffers).await;
-    }
-
-    // Configure the surface
-    let config = surface
-        .get_default_config(&adapter, width, height)
-        .expect("Surface not supported by adapter");
-    surface.configure(&device, &config);
-
-    // TODO: Move render setup somewhere else
-
-    let camera_bind_group_layout =
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Camera bind group layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-
-    let camera = Camera {
-        //eye: Vec3::new(4.0, -8.0, 8.0), // TODO: Remove
-        target: Vec3::ZERO,
-        distance: 12.0,
-        zenith: 0.841_068_7,
-        azimuth: 1.107_148_8,
-        aspect: width as f32 / height as f32,
-        fovy: f32::to_radians(90.0),
-        znear: 0.1,
-        zfar: 100.0,
-    };
-
-    let camera_uniform: Mat4 = camera.view_proj();
-
-    let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Camera buffer"),
-        contents: bytemuck::bytes_of(&camera_uniform),
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Camera bind group"),
-        layout: &camera_bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: wgpu::BindingResource::Buffer(camera_buffer.as_entire_buffer_binding()),
-        }],
-    });
-
-    let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
-
-    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Render pipeline layout"),
-        bind_group_layouts: &[&camera_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Render pipeline"),
-        layout: Some(&render_pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_main"),
-            buffers: &[Vertex::desc()],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: config.format,
-                blend: Some(wgpu::BlendState::REPLACE),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw,
-            cull_mode: None, // Some(wgpu::Face::Back),
-            polygon_mode: wgpu::PolygonMode::Fill,
-            unclipped_depth: false,
-            conservative: false,
-        },
-        depth_stencil: Some(wgpu::DepthStencilState {
-            format: State::DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        multisample: wgpu::MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let (depth_texture, depth_texture_view) =
-        State::configure_depth_texture(&device, width, height);
-
-    State {
-        surface,
-        device,
-        queue,
-        config,
-        meshgrid_buffers,
-        depth_texture,
-        depth_texture_view,
-        render_pipeline,
-        camera,
-        camera_buffer,
-        camera_bind_group,
+    JsApp {
+        inner: State::new(width, height, adapter, surface).await,
     }
 }
