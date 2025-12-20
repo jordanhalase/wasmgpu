@@ -8,11 +8,32 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 
+use core::f32::consts::{FRAC_PI_2, PI, TAU};
+
 mod meshgrid;
 
+#[inline(always)]
+fn float_modulo(a: f32, b: f32) -> f32 {
+    let r = a % b;
+    if r < 0.0 { r + b.abs() } else { r }
+}
+
+#[inline(always)]
+fn float_clamp(a: f32, lo: f32, hi: f32) -> f32 {
+    if a < lo {
+        lo
+    } else if a > hi {
+        hi
+    } else {
+        a
+    }
+}
+
 struct Camera {
-    eye: Vec3,
     target: Vec3,
+    distance: f32,
+    zenith: f32,
+    azimuth: f32,
     aspect: f32,
     fovy: f32,
     znear: f32,
@@ -21,16 +42,52 @@ struct Camera {
 
 impl Camera {
     const UP: Vec3 = Vec3::Z;
+    const CLOSEST: f32 = 0.1;
+    const FARTHEST: f32 = 15.0;
+    const ZENITH_CLAMP: f32 = 0.01;
 
     fn view_proj(&self) -> Mat4 {
-        let view = Mat4::look_at_rh(self.eye, self.target, Self::UP);
+        let eye = self.spherical_to_rect() - self.target;
+        let view = Mat4::look_at_rh(eye, self.target, Self::UP);
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
         proj * view
     }
 
-    /// Rotate about the z axis in radians
-    fn rotate_z(&mut self, angle: f32) {
-        self.eye = self.eye.rotate_z(angle); // TODO: Normalize to constant magnitude
+    /// Rotate from the Z axis in radians
+    fn rotate_zenith(&mut self, angle: f32) {
+        self.zenith = float_clamp(
+            self.zenith + angle,
+            Self::ZENITH_CLAMP,
+            PI - Self::ZENITH_CLAMP,
+        );
+    }
+
+    /// Rotate about the XY plane in radians
+    fn rotate_azimuth(&mut self, angle: f32) {
+        self.azimuth = float_modulo(self.azimuth + angle, TAU);
+    }
+
+    fn move_distance(&mut self, distance: f32) {
+        self.distance += distance;
+        self.distance = if self.distance < Self::CLOSEST {
+            Self::CLOSEST
+        } else if self.distance > Self::FARTHEST {
+            Self::FARTHEST
+        } else {
+            self.distance
+        }
+    }
+
+    /// Construct an X, Y, Z coordinate from the `distance`, `zenith`, and `azimuth` coordinate
+    fn spherical_to_rect(&self) -> Vec3 {
+        let sc_zenith = libm::sincosf(self.zenith);
+        let sc_azimuth = libm::sincosf(self.azimuth);
+
+        Vec3 {
+            x: self.distance * sc_zenith.0 * sc_azimuth.1,
+            y: self.distance * sc_zenith.0 * sc_azimuth.0,
+            z: self.distance * sc_zenith.1,
+        }
     }
 }
 
@@ -168,12 +225,21 @@ impl State {
         output.present();
     }
 
-    pub fn rotate_z(&mut self, angle: f32) {
-        self.camera.rotate_z(angle);
+    pub fn move_camera(&mut self, distance: f32, zenith: f32, azimuth: f32) {
+        self.camera.move_distance(distance);
+        self.camera.rotate_zenith(zenith);
+        self.camera.rotate_azimuth(azimuth);
         let camera_uniform = self.camera.view_proj();
         self.queue
             .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
     }
+
+    /*pub fn rotate_azimuth(&mut self, angle: f32) {
+        self.camera.rotate_azimuth(angle);
+        let camera_uniform = self.camera.view_proj();
+        self.queue
+            .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
+    }*/
 }
 
 #[repr(C)]
@@ -212,8 +278,8 @@ pub fn render(s: &mut State) {
 }
 
 #[wasm_bindgen]
-pub fn rotate_z(s: &mut State, angle: f32) {
-    s.rotate_z(angle * core::f32::consts::PI);
+pub fn move_camera(s: &mut State, distance: f32, zenith: f32, azimuth: f32) {
+    s.move_camera(distance, zenith * PI, azimuth * PI);
 }
 
 #[wasm_bindgen]
@@ -293,8 +359,11 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
         });
 
     let camera = Camera {
-        eye: Vec3::new(4.0, -8.0, 8.0),
+        //eye: Vec3::new(4.0, -8.0, 8.0), // TODO: Remove
         target: Vec3::ZERO,
+        distance: 12.0,
+        zenith: 0.84106867056793025578,
+        azimuth: 1.10714871779409050302,
         aspect: width as f32 / height as f32,
         fovy: f32::to_radians(90.0),
         znear: 0.1,

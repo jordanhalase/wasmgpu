@@ -646,6 +646,7 @@ dependencies = [
  "console_log",
  "futures",
  "glam",
+ "libm",
  "log",
  "wasm-bindgen",
  "wasm-bindgen-futures",

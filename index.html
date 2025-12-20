@@ -11,7 +11,7 @@
 <body>
     <canvas id="canvas" width="1024" height="768"></canvas>
     <script type="module">
-        import init, { start_webgpu_app, resize, render, rotate_z } from "./pkg/wasmgpu.js";
+        import init, { start_webgpu_app, resize, render, move_camera } from "./pkg/wasmgpu.js";
 
         let mouseDragging = false;
 
@@ -31,7 +31,9 @@
 
             canvas.addEventListener('mousemove', (e) => {
                 if (mouseDragging) {
-                    rotate_z(state, -e.movementX / canvas.width);
+                    const dx = e.movementX / canvas.width;
+                    const dy = e.movementY / canvas.height;
+                    move_camera(state, 0, -dy, -dx);
                     render(state);
                 }
             });
@@ -45,10 +47,14 @@
                 mouseDragging = false;
             });
 
+            canvas.addEventListener('mouseleave', (e) => {
+                mouseDragging = false;
+            });
+
             // TODO: Touch is more complicated
             document.addEventListener('touchmove', (e) => {
                 let clientPos = e.touches ? e.touches[0] : e;
-                rotate_z(state, -clientPos.clientX / canvas.width);
+                //rotate_azimuth(state, -clientPos.clientX / canvas.width);
                 render(state);
             }, { passive: false });
 
