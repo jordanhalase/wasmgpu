@@ -53,7 +53,7 @@ impl Camera {
     }
 
     fn move_distance(&mut self, distance: f32) {
-        self.distance += distance;
+        self.distance *= 1.0 - distance;
         self.distance = self.distance.clamp(Self::CLOSEST, Self::FARTHEST);
     }
 

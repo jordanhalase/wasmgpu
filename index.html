@@ -39,7 +39,7 @@
             });
 
             canvas.addEventListener('wheel', (e) => {
-                move_camera(state, e.deltaY * 0.01, 0, 0);
+                move_camera(state, -e.deltaY * 0.001, 0, 0);
                 render(state);
             });
 
