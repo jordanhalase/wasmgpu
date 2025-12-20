@@ -78,14 +78,20 @@ pub struct State {
     meshgrid_buffers: meshgrid::GridBuffers,
     depth_texture: wgpu::Texture,
     depth_texture_view: wgpu::TextureView,
+    render_pipeline_layout: wgpu::PipelineLayout,
+    render_shader_module: wgpu::ShaderModule,
     render_pipeline: wgpu::RenderPipeline,
     camera: Camera,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    multisample_texture: Option<wgpu::Texture>,
+    multisample_texture_view: Option<wgpu::TextureView>,
+    multisampling_enabled: bool,
 }
 
 impl State {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    pub const MSAA_SAMPLES: u32 = 4;
 
     pub async fn new(
         width: u32,
@@ -175,7 +181,7 @@ impl State {
             }],
         });
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let render_shader_module = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -188,13 +194,13 @@ impl State {
             label: Some("Render pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &render_shader_module,
                 entry_point: Some("vs_main"),
                 buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &render_shader_module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -229,7 +235,7 @@ impl State {
         });
 
         let (depth_texture, depth_texture_view) =
-            State::configure_depth_texture(&device, width, height, 1);
+            State::configure_depth_texture(&device, &config, 1);
 
         Self {
             surface,
@@ -239,10 +245,15 @@ impl State {
             meshgrid_buffers,
             depth_texture,
             depth_texture_view,
+            render_pipeline_layout,
+            render_shader_module,
             render_pipeline,
             camera,
             camera_buffer,
             camera_bind_group,
+            multisample_texture: None,
+            multisample_texture_view: None,
+            multisampling_enabled: false,
         }
     }
 
@@ -250,15 +261,14 @@ impl State {
     #[must_use]
     pub fn configure_depth_texture(
         device: &wgpu::Device,
-        width: u32,
-        height: u32,
+        config: &wgpu::SurfaceConfiguration,
         sample_count: u32,
     ) -> (wgpu::Texture, wgpu::TextureView) {
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Depth texture"),
             size: wgpu::Extent3d {
-                width,
-                height,
+                width: config.width,
+                height: config.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -291,6 +301,32 @@ impl State {
         (depth_texture, depth_texture_view)
     }
 
+    #[must_use]
+    pub fn configure_multisample_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
+        let mutlisample_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Multisample texture"),
+            size: wgpu::Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: Self::MSAA_SAMPLES,
+            dimension: wgpu::TextureDimension::D2,
+            format: config.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let multisample_texture_view =
+            mutlisample_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        (mutlisample_texture, multisample_texture_view)
+    }
+
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.config.width = width;
@@ -300,8 +336,24 @@ impl State {
             // More efficient to explicitly destory here than rely on Drop
             self.depth_texture.destroy();
 
-            // TODO: Make this MSAA aware
-            let (tex, view) = Self::configure_depth_texture(&self.device, width, height, 1);
+            let sample_count;
+            if self.multisampling_enabled {
+                sample_count = Self::MSAA_SAMPLES;
+
+                // May have just been enabled so this may be None
+                if let Some(multisample_texture) = self.multisample_texture.take() {
+                    multisample_texture.destroy();
+                }
+
+                let (tex, view) = Self::configure_multisample_texture(&self.device, &self.config);
+                self.multisample_texture.replace(tex);
+                self.multisample_texture_view.replace(view);
+            } else {
+                sample_count = 1;
+            }
+
+            let (tex, view) =
+                Self::configure_depth_texture(&self.device, &self.config, sample_count);
             self.depth_texture = tex;
             self.depth_texture_view = view;
 
@@ -318,21 +370,34 @@ impl State {
             .get_current_texture()
             .expect("Could not get current texture");
 
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let (view, resolve_target) = if self.multisampling_enabled {
+            (
+                self.multisample_texture_view
+                    .as_ref()
+                    .expect("Multisampling enabled with no texture view"),
+                Some(view),
+            )
+        } else {
+            (&view, None)
+        };
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Command encoder"),
             });
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: resolve_target.as_ref(),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
@@ -372,6 +437,84 @@ impl State {
         let camera_uniform = self.camera.view_proj();
         self.queue
             .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
+    }
+
+    pub fn set_multisampling_enabled(&mut self, enabled: bool) {
+        let sample_count;
+        if enabled {
+            if self.multisampling_enabled {
+                // Nothing to do
+                return;
+            }
+            self.multisampling_enabled = true;
+            sample_count = Self::MSAA_SAMPLES;
+        } else {
+            if !self.multisampling_enabled {
+                // Nothing to do
+                return;
+            }
+            self.multisampling_enabled = false;
+
+            self.multisample_texture
+                .as_mut()
+                .expect("Multisampling enabled with no texture")
+                .destroy();
+            self.multisample_texture = None;
+            self.multisample_texture_view = None;
+            sample_count = 1;
+        }
+
+        // Technically a resize for the render targets
+        self.resize(self.config.width, self.config.height);
+
+        // FIXME: This is just copy-pasted from the init function, there must be a better way
+        let render_pipeline = self
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Render pipeline"),
+                layout: Some(&self.render_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &self.render_shader_module,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Vertex::desc()],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &self.render_shader_module,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None, // Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: State::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: sample_count,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
+
+        self.render_pipeline = render_pipeline;
     }
 }
 
@@ -413,6 +556,11 @@ impl JsApp {
     }
 
     pub fn render(&mut self) {
+        self.inner.render();
+    }
+
+    pub fn set_multisampling_enabled(&mut self, enabled: bool) {
+        self.inner.set_multisampling_enabled(enabled);
         self.inner.render();
     }
 }

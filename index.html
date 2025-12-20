@@ -29,6 +29,8 @@
             let app = await start_app(canvas);
             app.render();
 
+            window.app = app;
+
             canvas.addEventListener('mousemove', (e) => {
                 if (mouseDragging) {
                     const dx = e.movementX / canvas.width;
