@@ -299,7 +299,9 @@ impl State {
 
             // More efficient to explicitly destory here than rely on Drop
             self.depth_texture.destroy();
-            let (tex, view) = Self::configure_depth_texture(&self.device, width, height);
+
+            // TODO: Make this MSAA aware
+            let (tex, view) = Self::configure_depth_texture(&self.device, width, height, 1);
             self.depth_texture = tex;
             self.depth_texture_view = view;
 
