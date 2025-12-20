@@ -1,5 +1,12 @@
 fn func(input: vec2f) -> f32 {
-    var out = 0.15*(input.x*input.x + input.y*input.y);
+    const freq_scale = 5.0;
+    let x = input.x * freq_scale;
+    let y = input.y * freq_scale;
+    let r = sqrt(x*x + y*y);
+    if (r == 0) {
+        return 1.0;
+    }
+    var out = sin(r)/r;
     return out;
 }
 
@@ -15,10 +22,12 @@ fn evaluate(@builtin(global_invocation_id) gid: vec3u)
         return;
     }
     let input = vec2f(vertex_buffer[e], vertex_buffer[e + 1]);
-    vertex_buffer[e + 2] = func(input);
+    let value = func(input);
+    vertex_buffer[e + 2] = value;
 
+    let color = (value + 0.25) * 0.8;
     // TODO
-    //vertex_buffer[e + 3] = f32(gid.x)/f32(grid.resolution.y-1);
-    //vertex_buffer[e + 4] = f32(gid.y)/f32(grid.resolution.x-1);
-    //vertex_buffer[e + 5] = 0.0;
+    vertex_buffer[e + 3] = color;
+    vertex_buffer[e + 4] = color;
+    vertex_buffer[e + 5] = color;
 }

@@ -8,7 +8,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 
-use core::f32::consts::{FRAC_PI_2, PI, TAU};
+use core::f32::consts::{PI, TAU};
 
 mod meshgrid;
 
@@ -16,17 +16,6 @@ mod meshgrid;
 fn float_modulo(a: f32, b: f32) -> f32 {
     let r = a % b;
     if r < 0.0 { r + b.abs() } else { r }
-}
-
-#[inline(always)]
-fn float_clamp(a: f32, lo: f32, hi: f32) -> f32 {
-    if a < lo {
-        lo
-    } else if a > hi {
-        hi
-    } else {
-        a
-    }
 }
 
 struct Camera {
@@ -55,11 +44,7 @@ impl Camera {
 
     /// Rotate from the Z axis in radians
     fn rotate_zenith(&mut self, angle: f32) {
-        self.zenith = float_clamp(
-            self.zenith + angle,
-            Self::ZENITH_CLAMP,
-            PI - Self::ZENITH_CLAMP,
-        );
+        self.zenith = (self.zenith + angle).clamp(Self::ZENITH_CLAMP, PI - Self::ZENITH_CLAMP);
     }
 
     /// Rotate about the XY plane in radians
@@ -69,13 +54,7 @@ impl Camera {
 
     fn move_distance(&mut self, distance: f32) {
         self.distance += distance;
-        self.distance = if self.distance < Self::CLOSEST {
-            Self::CLOSEST
-        } else if self.distance > Self::FARTHEST {
-            Self::FARTHEST
-        } else {
-            self.distance
-        }
+        self.distance = self.distance.clamp(Self::CLOSEST, Self::FARTHEST);
     }
 
     /// Construct an X, Y, Z coordinate from the `distance`, `zenith`, and `azimuth` coordinate
@@ -321,7 +300,7 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
     // Create a compute pipeline
 
     let meshgrid_generator = meshgrid::Generator::new(&device, &queue);
-    let meshgrid_buffers = meshgrid_generator.generate_buffers((31, 31), -5.0..=5.0, -5.0..=5.0);
+    let meshgrid_buffers = meshgrid_generator.generate_buffers((255, 255), -5.0..=5.0, -5.0..=5.0);
 
     let evaluator_module = device.create_shader_module(wgpu::include_wgsl!("evaluator.wgsl"));
     let evaluator = meshgrid_generator.create_evaluator(&evaluator_module, Some("evaluate"));
@@ -362,8 +341,8 @@ pub async fn start_webgpu_app(canvas: HtmlCanvasElement) -> State {
         //eye: Vec3::new(4.0, -8.0, 8.0), // TODO: Remove
         target: Vec3::ZERO,
         distance: 12.0,
-        zenith: 0.84106867056793025578,
-        azimuth: 1.10714871779409050302,
+        zenith: 0.841_068_7,
+        azimuth: 1.107_148_8,
         aspect: width as f32 / height as f32,
         fovy: f32::to_radians(90.0),
         znear: 0.1,

@@ -38,6 +38,11 @@
                 }
             });
 
+            canvas.addEventListener('wheel', (e) => {
+                move_camera(state, e.deltaY * 0.01, 0, 0);
+                render(state);
+            });
+
             canvas.addEventListener('mousedown', (e) => {
                 mouseDragging = true;
                 canvas.classList.add('no-cursor');
@@ -57,12 +62,6 @@
                 //rotate_azimuth(state, -clientPos.clientX / canvas.width);
                 render(state);
             }, { passive: false });
-
-            // TODO: Detect these in JS and handle in Rust
-            /*
-            canvas.addEventListener('wheel', (e) => {
-                console.log('canvas wheel', { deltaY: e.deltaY, ctrlKey: e.ctrlKey });
-            });*/
         }
 
         run();
