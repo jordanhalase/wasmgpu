@@ -58,6 +58,56 @@
                 mouseDragging = false;
             });
 
+            // TODO: Remove, only for debugging
+
+            let toggle_aa = function () {
+                let enabled = !app.is_multisampling_enabled();
+                console.log(`Setting multisampling to ${enabled}`);
+                app.set_multisampling_enabled(enabled);
+            }
+
+            window.addEventListener('keypress', (e) => {
+                let size_start = 1 << 4;
+                switch (e.key) {
+                    case '1':
+                        size_start <<= 0;
+                        break;
+                    case '2':
+                        size_start <<= 1;
+                        break;
+                    case '3':
+                        size_start <<= 2;
+                        break;
+                    case '4':
+                        size_start <<= 3;
+                        break;
+                    case '5':
+                        size_start <<= 4;
+                        break;
+                    case '6':
+                        size_start <<= 5;
+                        break;
+                    case '7':
+                        size_start <<= 6;
+                        break;
+                    case '8':
+                        size_start <<= 7;
+                        break;
+                    case '9':
+                        // 4095 is too big
+                        size_start <<= 8;
+                        break;
+                    case 'a':
+                        toggle_aa();
+                        return;
+                    default:
+                        break;
+                }
+                size_start -= 1;
+                console.log(size_start);
+                app.set_grid_resolution(size_start, size_start);
+            });
+
             // TODO: Touch is more complicated
             document.addEventListener('touchmove', (e) => {
                 let clientPos = e.touches ? e.touches[0] : e;

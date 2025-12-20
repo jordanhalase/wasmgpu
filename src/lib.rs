@@ -459,6 +459,10 @@ impl State {
             .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
     }
 
+    pub fn is_multisampling_enabled(&self) -> bool {
+        self.multisampling_enabled
+    }
+
     pub fn set_multisampling_enabled(&mut self, enabled: bool) {
         let sample_count;
         if enabled {
@@ -542,6 +546,10 @@ impl JsApp {
         self.inner.render();
     }
 
+    pub fn is_multisampling_enabled(&self) -> bool {
+        self.inner.is_multisampling_enabled()
+    }
+
     pub fn set_multisampling_enabled(&mut self, enabled: bool) {
         self.inner.set_multisampling_enabled(enabled);
         self.inner.render();
@@ -561,6 +569,8 @@ pub async fn start_app(canvas: HtmlCanvasElement) -> JsApp {
 
     let width = canvas.width();
     let height = canvas.height();
+
+    log::info!("New app at resolution {width}, {height}");
 
     // Create a wgpu instance
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
