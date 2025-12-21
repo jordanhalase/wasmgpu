@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebGPU</title>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      touch-action: none;
+    }
+
+    .container {
+      display: grid;
+      height: 100vh;
+      /* Initial layout for landscape/desktop */
+      grid-template-columns: 75% 6px 1fr;
+      grid-template-rows: 1fr;
+      grid-template-areas: "canvas resizer controls";
+    }
+
+    #canvas-pane {
+      grid-area: canvas;
+      background: #222;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #controls-pane {
+      grid-area: controls;
+      background: #ffffff;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    /* Resizer bar */
+    #resizer {
+      grid-area: resizer;
+      background: #aaa;
+      cursor: col-resize;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #resizer:hover,
+    #resizer.active {
+      background: #888;
+    }
+
+    /* Portrait mode */
+    @media (orientation: portrait) {
+      .container.portrait {
+        grid-template-columns: 1fr;
+        grid-template-rows: 25% 10px auto;
+        grid-template-areas:
+          "canvas"
+          "resizer"
+          "controls";
+      }
+
+      .container.portrait #resizer {
+        cursor: row-resize;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <div id="canvas-pane">
+      <canvas id="myCanvas"></canvas>
+    </div>
+
+    <div id="resizer"></div>
+
+    <div id="controls-pane">
+      <h2 style="margin-top:0;">Controls</h2>
+
+      <div class="control-group">
+        <label for="slider1">Parameter 1</label>
+        <input type="range" id="slider1" min="0" max="100" value="50">
+      </div>
+
+      <div class="control-group">
+        <label for="slider2">Parameter 2</label>
+        <input type="range" id="slider2" min="0" max="200" value="100">
+      </div>
+
+      <div class="control-group">
+        <label for="slider3">Speed</label>
+        <input type="range" id="slider3" min="0" max="10" step="0.1" value="5">
+      </div>
+
+      <div class="control-group">
+        <label for="slider4">Opacity</label>
+        <input type="range" id="slider4" min="0" max="100" value="80">
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import init, { start_app, JsApp } from "./pkg/wasmgpu.js";
+
+    const canvas = document.getElementById('myCanvas');
+    const resizer = document.getElementById('resizer');
+    const container = document.querySelector('.container');
+
+    const MIN_CANVAS_PERCENT = 40;
+    const MAX_CANVAS_PERCENT = 90;
+
+    const PIXEL_RATIO = window.devicePixelRatio || 1;
+
+    let isResizing = false;
+    let currentCanvasPercent = 75; // Track the current canvas size
+    let app;
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth * PIXEL_RATIO;
+      canvas.height = canvas.parentElement.clientHeight * PIXEL_RATIO;
+      if (app != null) {
+        app.resize(canvas.width, canvas.height);
+        app.render();
+      }
+    }
+
+    function applyLayout() {
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+      if (isPortrait) {
+        container.classList.add('portrait');
+        container.style.gridTemplateColumns = ''; // Clear horizontal settings
+        container.style.gridTemplateRows = `${currentCanvasPercent}% 10px auto`;
+      } else {
+        container.classList.remove('portrait');
+        container.style.gridTemplateRows = ''; // Clear vertical settings
+        container.style.gridTemplateColumns = `${currentCanvasPercent}% 6px 1fr`;
+      }
+
+      resizeCanvas();
+    }
+
+    // Initial layout
+    applyLayout();
+
+    // Re-apply on orientation change
+    window.matchMedia('(orientation: portrait)').addEventListener('change', applyLayout);
+    window.addEventListener('resize', resizeCanvas);
+
+    // Resizing logic
+    function startResize(e) {
+      isResizing = true;
+      resizer.classList.add('active');
+      e.preventDefault();
+    }
+
+    function doResize(e) {
+      if (!isResizing) return;
+
+      const rect = container.getBoundingClientRect();
+      let clientPos = e.touches ? e.touches[0] : e;
+
+      let percent;
+      if (window.matchMedia('(orientation: portrait)').matches) {
+        percent = ((clientPos.clientY - rect.top) / rect.height) * 100;
+      } else {
+        percent = ((clientPos.clientX - rect.left) / rect.width) * 100;
+      }
+
+      percent = Math.max(MIN_CANVAS_PERCENT, Math.min(MAX_CANVAS_PERCENT, percent));
+      currentCanvasPercent = percent;
+
+      // Apply immediately during drag
+      applyLayout();
+    }
+
+    function stopResize() {
+      if (isResizing) {
+        isResizing = false;
+        resizer.classList.remove('active');
+      }
+    }
+
+    // Mouse events
+    resizer.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+
+    // Touch events
+    resizer.addEventListener('touchstart', startResize, { passive: false });
+    document.addEventListener('touchmove', doResize, { passive: false });
+    document.addEventListener('touchend', stopResize);
+
+    resizer.addEventListener('contextmenu', e => e.preventDefault());
+
+    let mouseDragging = false;
+
+    async function run() {
+      if (!('gpu' in navigator)) {
+        alert("This browser does not support WebGPU");
+        return;
+      }
+      if (typeof WebAssembly === 'undefined') {
+        alert("This browser does not support WebAssembly");
+        return;
+      }
+
+      await init();
+      app = await start_app(canvas);
+      app.render();
+
+      window.app = app;
+
+      canvas.addEventListener('mousemove', (e) => {
+        if (mouseDragging) {
+          const dx = e.movementX * PIXEL_RATIO / canvas.width;
+          const dy = e.movementY * PIXEL_RATIO / canvas.height;
+          app.move_camera(0, -dy, -dx);
+          app.render();
+        }
+      });
+
+      canvas.addEventListener('wheel', (e) => {
+        app.move_camera(-e.deltaY * 0.001, 0, 0);
+        app.render();
+      });
+
+      canvas.addEventListener('mousedown', (e) => {
+        mouseDragging = true;
+        canvas.classList.add('no-cursor');
+      });
+
+      canvas.addEventListener('mouseup', (e) => {
+        mouseDragging = false;
+      });
+
+      canvas.addEventListener('mouseleave', (e) => {
+        mouseDragging = false;
+      });
+
+      // TODO: Remove, only for debugging
+
+      let toggle_aa = function() {
+        let enabled = !app.is_multisampling_enabled();
+        console.log(`Setting multisampling to ${enabled}`);
+        app.set_multisampling_enabled(enabled);
+      }
+
+      window.addEventListener('keypress', (e) => {
+        let size_start = 1 << 4;
+        switch (e.key) {
+          case '1':
+            size_start <<= 0;
+            break;
+          case '2':
+            size_start <<= 1;
+            break;
+          case '3':
+            size_start <<= 2;
+            break;
+          case '4':
+            size_start <<= 3;
+            break;
+          case '5':
+            size_start <<= 4;
+            break;
+          case '6':
+            size_start <<= 5;
+            break;
+          case '7':
+            size_start <<= 6;
+            break;
+          case '8':
+            size_start <<= 7;
+            break;
+          case '9':
+            // 4095 is too big
+            size_start <<= 8;
+            break;
+          case 'a':
+            toggle_aa();
+            return;
+          default:
+            break;
+        }
+        size_start -= 1;
+        console.log(size_start);
+        app.set_grid_resolution(size_start, size_start);
+      });
+
+      // TODO: Touch is more complicated
+      document.addEventListener('touchmove', (e) => {
+        let clientPos = e.touches ? e.touches[0] : e;
+        app.render();
+      }, { passive: false });
+    }
+
+    run();
+  </script>
+
+</body>
+
+</html>
