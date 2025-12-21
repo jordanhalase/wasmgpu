@@ -89,6 +89,11 @@
       <h2 style="margin-top:0;">Controls</h2>
 
       <div class="control-group">
+        <label for="multisample">MSAA</label>
+        <input type="checkbox" id="multisample" autocomplete="off">
+      </div>
+
+      <div class="control-group">
         <label for="slider1">Parameter 1</label>
         <input type="range" id="slider1" min="0" max="100" value="50">
       </div>
@@ -97,17 +102,8 @@
         <label for="slider2">Parameter 2</label>
         <input type="range" id="slider2" min="0" max="200" value="100">
       </div>
-
-      <div class="control-group">
-        <label for="slider3">Speed</label>
-        <input type="range" id="slider3" min="0" max="10" step="0.1" value="5">
-      </div>
-
-      <div class="control-group">
-        <label for="slider4">Opacity</label>
-        <input type="range" id="slider4" min="0" max="100" value="80">
-      </div>
     </div>
+  </div>
   </div>
 
   <script type="module">
@@ -116,6 +112,8 @@
     const canvas = document.getElementById('myCanvas');
     const resizer = document.getElementById('resizer');
     const container = document.querySelector('.container');
+
+    const multisampleCheck = document.getElementById('multisample');
 
     const MIN_CANVAS_PERCENT = 40;
     const MAX_CANVAS_PERCENT = 90;
@@ -222,6 +220,11 @@
 
       window.app = app;
 
+      // Control panel
+      multisampleCheck.addEventListener('change', e => {
+        app.set_multisampling_enabled(e.target.checked);
+      });
+
       canvas.addEventListener('mousemove', (e) => {
         if (mouseDragging) {
           const dx = e.movementX * PIXEL_RATIO / canvas.width;
@@ -251,7 +254,7 @@
 
       // TODO: Remove, only for debugging
 
-      let toggle_aa = function() {
+      let toggle_aa = function () {
         let enabled = !app.is_multisampling_enabled();
         console.log(`Setting multisampling to ${enabled}`);
         app.set_multisampling_enabled(enabled);
