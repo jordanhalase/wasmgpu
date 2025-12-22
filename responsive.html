@@ -204,6 +204,13 @@
 
     let mouseDragging = false;
 
+    let touchZooming = false;
+    let id0 = 0; // First finger (orbital)
+    let id1 = 0; // Second finger (zoom activation)
+
+    let prevTouch = {};
+    let deltaTouch = {};
+
     async function run() {
       if (!('gpu' in navigator)) {
         alert("This browser does not support WebGPU");
@@ -251,6 +258,56 @@
       canvas.addEventListener('mouseleave', (e) => {
         mouseDragging = false;
       });
+
+      // TODO: Touch is more complicated
+      canvas.addEventListener('touchstart', (e) => {
+        touchZooming = e.touches.length > 1;
+        if (touchZooming) {
+          id1 = e.changedTouches[0].identifier;
+        } else {
+          id0 = e.changedTouches[0].identifier;
+        }
+        [...e.changedTouches].forEach(touch => {
+          const id = touch.identifier;
+          prevTouch[id] = [touch.clientX, touch.clientY];
+        });
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (e) => {
+        touchZooming = e.touches.length > 1;
+
+        [...e.touches].forEach(touch => {
+          const id = touch.identifier;
+          const x = touch.clientX;
+          const y = touch.clientY;
+          const dx = (x - prevTouch[id][0]) * PIXEL_RATIO / canvas.width;
+          const dy = (y - prevTouch[id][1]) * PIXEL_RATIO / canvas.height;
+          deltaTouch[id] = [dx, dy];
+          prevTouch[id] = [x, y];
+        });
+
+        app.move_camera(0, -deltaTouch[id0][1], -deltaTouch[id0][0]);
+        app.render();
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', (e) => {
+        touchZooming = e.touches.length > 1;
+        [...e.changedTouches].forEach((touch) => {
+          const id = touch.identifier;
+          if (id == id0) {
+            id0 = id1;
+          }
+          delete prevTouch[id];
+          delete deltaTouch[id];
+        });
+      }, { passive: false });
+
+      canvas.addEventListener('touchcancel', (e) => {
+        console.log("TOUCHCANCEL");
+        touchZooming = false;
+        prevTouch = {};
+        deltaTouch = {};
+      }, { passive: false });
 
       // TODO: Remove, only for debugging
 
@@ -301,12 +358,6 @@
         console.log(size_start);
         app.set_grid_resolution(size_start, size_start);
       });
-
-      // TODO: Touch is more complicated
-      document.addEventListener('touchmove', (e) => {
-        let clientPos = e.touches ? e.touches[0] : e;
-        app.render();
-      }, { passive: false });
     }
 
     run();
