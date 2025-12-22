@@ -207,6 +207,8 @@
     let touchZooming = false;
     let id0 = 0; // First finger (orbital)
     let id1 = 0; // Second finger (zoom activation)
+    let zoomDistance = 0;
+    let zoomDelta = 0;
 
     let prevTouch = {};
     let deltaTouch = {};
@@ -262,15 +264,20 @@
       // TODO: Touch is more complicated
       canvas.addEventListener('touchstart', (e) => {
         touchZooming = e.touches.length > 1;
-        if (touchZooming) {
-          id1 = e.changedTouches[0].identifier;
-        } else {
-          id0 = e.changedTouches[0].identifier;
-        }
+
         [...e.changedTouches].forEach(touch => {
           const id = touch.identifier;
           prevTouch[id] = [touch.clientX, touch.clientY];
         });
+
+        if (touchZooming) {
+          id1 = e.changedTouches[0].identifier;
+          const dx = prevTouch[id1][0] - prevTouch[id0][0];
+          const dy = prevTouch[id1][1] - prevTouch[id0][1];
+          zoomDistance = Math.sqrt(dx*dx + dy*dy);
+        } else {
+          id0 = e.changedTouches[0].identifier;
+        }
       }, { passive: false });
 
       canvas.addEventListener('touchmove', (e) => {
@@ -286,7 +293,16 @@
           prevTouch[id] = [x, y];
         });
 
-        app.move_camera(0, -deltaTouch[id0][1], -deltaTouch[id0][0]);
+        if (touchZooming) {
+          const dx = prevTouch[id1][0] - prevTouch[id0][0];
+          const dy = prevTouch[id1][1] - prevTouch[id0][1];
+          const distance = Math.sqrt(dx*dx + dy*dy);
+          zoomDelta = distance - zoomDistance;
+          zoomDistance = distance;
+          app.move_camera(zoomDelta * 0.005, 0, 0);
+        } else {
+          app.move_camera(0, -deltaTouch[id0][1], -deltaTouch[id0][0]);
+        }
         app.render();
       }, { passive: false });
 
