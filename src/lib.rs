@@ -1,6 +1,6 @@
 #![no_std]
 
-use glam::{Mat4, Vec3};
+use glam::{EulerRot, Mat4, Quat, Vec3};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 use wgpu::{
@@ -29,29 +29,35 @@ struct Camera {
     zfar: f32,
 }
 
+#[allow(unused)]
 impl Camera {
-    const UP: Vec3 = Vec3::Z;
     const CLOSEST: f32 = 0.1;
     const FARTHEST: f32 = 15.0;
-    const ZENITH_CLAMP: f32 = 0.01;
+    const ZENITH_CLAMP: f32 = 0.0;
 
     fn view_proj(&self) -> Mat4 {
-        let eye = self.spherical_to_rect() - self.target;
-        let view = Mat4::look_at_rh(eye, self.target, Self::UP);
+        let center = Mat4::from_translation(-self.target);
+        let quat = Quat::from_euler(EulerRot::ZXY, self.azimuth, self.zenith, 0.0);
+        let view =
+            Mat4::from_rotation_translation(quat.inverse(), Vec3::new(0.0, 0.0, -self.distance));
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
-        proj * view
+        proj * view * center
     }
 
-    /// Rotate from the Z axis in radians
+    /// Rotate from the Z axis in radians relative to its current rotation
     fn rotate_zenith(&mut self, angle: f32) {
         self.zenith = (self.zenith + angle).clamp(Self::ZENITH_CLAMP, PI - Self::ZENITH_CLAMP);
     }
 
-    /// Rotate about the XY plane in radians
+    /// Rotate about the XY plane in radians relative to its current rotation
     fn rotate_azimuth(&mut self, angle: f32) {
         self.azimuth = float_modulo(self.azimuth + angle, TAU);
     }
 
+    /// Dolly into or out of the focus center relative to its current position
+    ///
+    /// This is multiplicative. Values < 1.0 dolly in and values > 1.0 dolly out.
+    /// Values are clamped between `Self::CLOSEST` and `SELF::FARTHEST`.
     fn move_distance(&mut self, distance: f32) {
         self.distance *= 1.0 - distance;
         self.distance = self.distance.clamp(Self::CLOSEST, Self::FARTHEST);
