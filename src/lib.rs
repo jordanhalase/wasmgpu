@@ -194,8 +194,8 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render pipeline layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&camera_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let render_pipeline = Self::create_render_pipeline(
@@ -328,8 +328,8 @@ impl State {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Self::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -338,7 +338,7 @@ impl State {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         })
     }
@@ -391,10 +391,10 @@ impl State {
     }
 
     pub fn render(&mut self) {
-        let output = self
-            .surface
-            .get_current_texture()
-            .expect("Could not get current texture");
+        let wgpu::CurrentSurfaceTexture::Success(output) = self.surface.get_current_texture()
+        else {
+            panic!("Could not get current texture");
+        };
 
         let view = output
             .texture
@@ -439,6 +439,7 @@ impl State {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
@@ -579,7 +580,7 @@ pub async fn start_app(canvas: HtmlCanvasElement) -> JsApp {
     log::info!("New app at resolution {width}, {height}");
 
     // Create a wgpu instance
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
     let surface = instance
         .create_surface(wgpu::SurfaceTarget::Canvas(canvas))

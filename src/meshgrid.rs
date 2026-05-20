@@ -73,8 +73,8 @@ impl Generator {
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Generator compute pipeline layout"),
-                bind_group_layouts: &[&compute_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&compute_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let gen_vertex_module = device.create_shader_module(include_wgsl!("gen_vertex.wgsl"));
@@ -124,8 +124,8 @@ impl Generator {
         let evaluator_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Evaluator pipeline layout"),
-                bind_group_layouts: &[&evaluator_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&evaluator_bind_group_layout)],
+                immediate_size: 0,
             });
 
         Self {
