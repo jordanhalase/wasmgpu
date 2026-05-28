@@ -125,28 +125,28 @@
     let app;
 
     function resizeCanvas() {
-      canvas.width = canvas.parentElement.clientWidth * PIXEL_RATIO;
-      canvas.height = canvas.parentElement.clientHeight * PIXEL_RATIO;
-      if (app != null) {
-        app.resize(canvas.width, canvas.height);
-        app.render();
-      }
+        canvas.width = canvas.parentElement.clientWidth * PIXEL_RATIO;
+        canvas.height = canvas.parentElement.clientHeight * PIXEL_RATIO;
+        if (app != null) {
+            app.resize(canvas.width, canvas.height);
+            app.render();
+        }
     }
 
     function applyLayout() {
-      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+        const isPortrait = window.matchMedia('(orientation: portrait)').matches;
 
-      if (isPortrait) {
-        container.classList.add('portrait');
-        container.style.gridTemplateColumns = ''; // Clear horizontal settings
-        container.style.gridTemplateRows = `${currentCanvasPercent}% 10px auto`;
-      } else {
-        container.classList.remove('portrait');
-        container.style.gridTemplateRows = ''; // Clear vertical settings
-        container.style.gridTemplateColumns = `${currentCanvasPercent}% 6px 1fr`;
-      }
+        if (isPortrait) {
+            container.classList.add('portrait');
+            container.style.gridTemplateColumns = ''; // Clear horizontal settings
+            container.style.gridTemplateRows = `${currentCanvasPercent}% 10px auto`;
+        } else {
+            container.classList.remove('portrait');
+            container.style.gridTemplateRows = ''; // Clear vertical settings
+            container.style.gridTemplateColumns = `${currentCanvasPercent}% 6px 1fr`;
+        }
 
-      resizeCanvas();
+        resizeCanvas();
     }
 
     // Initial layout
@@ -158,9 +158,9 @@
 
     // Resizing logic
     function startResize(e) {
-      isResizing = true;
-      resizer.classList.add('active');
-      e.preventDefault();
+        isResizing = true;
+        resizer.classList.add('active');
+        e.preventDefault();
     }
 
     function doResize(e) {
@@ -171,9 +171,9 @@
 
       let percent;
       if (window.matchMedia('(orientation: portrait)').matches) {
-        percent = ((clientPos.clientY - rect.top) / rect.height) * 100;
+          percent = ((clientPos.clientY - rect.top) / rect.height) * 100;
       } else {
-        percent = ((clientPos.clientX - rect.left) / rect.width) * 100;
+          percent = ((clientPos.clientX - rect.left) / rect.width) * 100;
       }
 
       percent = Math.max(MIN_CANVAS_PERCENT, Math.min(MAX_CANVAS_PERCENT, percent));
@@ -184,10 +184,10 @@
     }
 
     function stopResize() {
-      if (isResizing) {
-        isResizing = false;
-        resizer.classList.remove('active');
-      }
+        if (isResizing) {
+            isResizing = false;
+            resizer.classList.remove('active');
+        }
     }
 
     // Mouse events
@@ -214,166 +214,166 @@
     let deltaTouch = {};
 
     async function run() {
-      if (!('gpu' in navigator)) {
-        alert("This browser does not support WebGPU");
-        return;
-      }
-      if (typeof WebAssembly === 'undefined') {
-        alert("This browser does not support WebAssembly");
-        return;
-      }
-
-      await init();
-      app = await start_app(canvas);
-      app.render();
-
-      window.app = app;
-
-      // Control panel
-      multisampleCheck.addEventListener('change', e => {
-        app.set_multisampling_enabled(e.target.checked);
-      });
-
-      canvas.addEventListener('mousemove', (e) => {
-        if (mouseDragging) {
-          const dx = e.movementX * PIXEL_RATIO / canvas.width;
-          const dy = e.movementY * PIXEL_RATIO / canvas.height;
-          app.move_camera(0, -dy, -dx);
-          app.render();
-        }
-      });
-
-      canvas.addEventListener('wheel', (e) => {
-        app.move_camera(-e.deltaY * 0.001, 0, 0);
-        app.render();
-      });
-
-      canvas.addEventListener('mousedown', (e) => {
-        mouseDragging = true;
-        canvas.classList.add('no-cursor');
-      });
-
-      canvas.addEventListener('mouseup', (e) => {
-        mouseDragging = false;
-      });
-
-      canvas.addEventListener('mouseleave', (e) => {
-        mouseDragging = false;
-      });
-
-      // TODO: Touch is more complicated
-      canvas.addEventListener('touchstart', (e) => {
-        touchZooming = e.touches.length > 1;
-
-        [...e.changedTouches].forEach(touch => {
-          const id = touch.identifier;
-          prevTouch[id] = [touch.clientX, touch.clientY];
-        });
-
-        if (touchZooming) {
-          id1 = e.changedTouches[0].identifier;
-          const dx = prevTouch[id1][0] - prevTouch[id0][0];
-          const dy = prevTouch[id1][1] - prevTouch[id0][1];
-          zoomDistance = Math.sqrt(dx*dx + dy*dy);
-        } else {
-          id0 = e.changedTouches[0].identifier;
-        }
-      }, { passive: false });
-
-      canvas.addEventListener('touchmove', (e) => {
-        touchZooming = e.touches.length > 1;
-
-        [...e.touches].forEach(touch => {
-          const id = touch.identifier;
-          const x = touch.clientX;
-          const y = touch.clientY;
-          const dx = (x - prevTouch[id][0]) * PIXEL_RATIO / canvas.width;
-          const dy = (y - prevTouch[id][1]) * PIXEL_RATIO / canvas.height;
-          deltaTouch[id] = [dx, dy];
-          prevTouch[id] = [x, y];
-        });
-
-        if (touchZooming) {
-          const dx = prevTouch[id1][0] - prevTouch[id0][0];
-          const dy = prevTouch[id1][1] - prevTouch[id0][1];
-          const distance = Math.sqrt(dx*dx + dy*dy);
-          zoomDelta = distance - zoomDistance;
-          zoomDistance = distance;
-          app.move_camera(zoomDelta * 0.005, 0, 0);
-        } else {
-          app.move_camera(0, -deltaTouch[id0][1], -deltaTouch[id0][0]);
-        }
-        app.render();
-      }, { passive: false });
-
-      canvas.addEventListener('touchend', (e) => {
-        touchZooming = e.touches.length > 1;
-        [...e.changedTouches].forEach((touch) => {
-          const id = touch.identifier;
-          if (id == id0) {
-            id0 = id1;
-          }
-          delete prevTouch[id];
-          delete deltaTouch[id];
-        });
-      }, { passive: false });
-
-      canvas.addEventListener('touchcancel', (e) => {
-        console.log("TOUCHCANCEL");
-        touchZooming = false;
-        prevTouch = {};
-        deltaTouch = {};
-      }, { passive: false });
-
-      // TODO: Remove, only for debugging
-
-      let toggle_aa = function () {
-        let enabled = !app.is_multisampling_enabled();
-        console.log(`Setting multisampling to ${enabled}`);
-        app.set_multisampling_enabled(enabled);
-      }
-
-      window.addEventListener('keypress', (e) => {
-        let size_start = 1 << 4;
-        switch (e.key) {
-          case '1':
-            size_start <<= 0;
-            break;
-          case '2':
-            size_start <<= 1;
-            break;
-          case '3':
-            size_start <<= 2;
-            break;
-          case '4':
-            size_start <<= 3;
-            break;
-          case '5':
-            size_start <<= 4;
-            break;
-          case '6':
-            size_start <<= 5;
-            break;
-          case '7':
-            size_start <<= 6;
-            break;
-          case '8':
-            size_start <<= 7;
-            break;
-          case '9':
-            // 4095 is too big
-            size_start <<= 8;
-            break;
-          case 'a':
-            toggle_aa();
+        if (!('gpu' in navigator)) {
+            alert("This browser does not support WebGPU");
             return;
-          default:
-            break;
         }
-        size_start -= 1;
-        console.log(size_start);
-        app.set_grid_resolution(size_start, size_start);
-      });
+        if (typeof WebAssembly === 'undefined') {
+            alert("This browser does not support WebAssembly");
+            return;
+        }
+
+        await init();
+        app = await start_app(canvas);
+        app.render();
+
+        window.app = app;
+
+        // Control panel
+        multisampleCheck.addEventListener('change', e => {
+            app.set_multisampling_enabled(e.target.checked);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (mouseDragging) {
+                const dx = e.movementX * PIXEL_RATIO / canvas.width;
+                const dy = e.movementY * PIXEL_RATIO / canvas.height;
+                app.move_camera(0, -dy, -dx);
+                app.render();
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            app.move_camera(-e.deltaY * 0.001, 0, 0);
+            app.render();
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDragging = true;
+            canvas.classList.add('no-cursor');
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            mouseDragging = false;
+        });
+
+        canvas.addEventListener('mouseleave', (e) => {
+            mouseDragging = false;
+        });
+
+        // TODO: Touch is more complicated
+        canvas.addEventListener('touchstart', (e) => {
+            touchZooming = e.touches.length > 1;
+
+            [...e.changedTouches].forEach(touch => {
+                const id = touch.identifier;
+                prevTouch[id] = [touch.clientX, touch.clientY];
+            });
+
+            if (touchZooming) {
+                id1 = e.changedTouches[0].identifier;
+                const dx = prevTouch[id1][0] - prevTouch[id0][0];
+                const dy = prevTouch[id1][1] - prevTouch[id0][1];
+                zoomDistance = Math.sqrt(dx*dx + dy*dy);
+            } else {
+                id0 = e.changedTouches[0].identifier;
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            touchZooming = e.touches.length > 1;
+
+            [...e.touches].forEach(touch => {
+                const id = touch.identifier;
+                const x = touch.clientX;
+                const y = touch.clientY;
+                const dx = (x - prevTouch[id][0]) * PIXEL_RATIO / canvas.width;
+                const dy = (y - prevTouch[id][1]) * PIXEL_RATIO / canvas.height;
+                deltaTouch[id] = [dx, dy];
+                prevTouch[id] = [x, y];
+            });
+
+            if (touchZooming) {
+                const dx = prevTouch[id1][0] - prevTouch[id0][0];
+                const dy = prevTouch[id1][1] - prevTouch[id0][1];
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                zoomDelta = distance - zoomDistance;
+                zoomDistance = distance;
+                app.move_camera(zoomDelta * 0.005, 0, 0);
+            } else {
+                app.move_camera(0, -deltaTouch[id0][1], -deltaTouch[id0][0]);
+            }
+            app.render();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            touchZooming = e.touches.length > 1;
+            [...e.changedTouches].forEach((touch) => {
+                const id = touch.identifier;
+                if (id == id0) {
+                  id0 = id1;
+                }
+                delete prevTouch[id];
+                delete deltaTouch[id];
+            });
+        }, { passive: false });
+
+        canvas.addEventListener('touchcancel', (e) => {
+            console.log("TOUCHCANCEL");
+            touchZooming = false;
+            prevTouch = {};
+            deltaTouch = {};
+        }, { passive: false });
+
+        // TODO: Remove, only for debugging
+
+        let toggle_aa = function () {
+            let enabled = !app.is_multisampling_enabled();
+            console.log(`Setting multisampling to ${enabled}`);
+            app.set_multisampling_enabled(enabled);
+        }
+
+        window.addEventListener('keypress', (e) => {
+            let size_start = 1 << 4;
+            switch (e.key) {
+                case '1':
+                    size_start <<= 0;
+                    break;
+                case '2':
+                    size_start <<= 1;
+                    break;
+                case '3':
+                    size_start <<= 2;
+                    break;
+                case '4':
+                    size_start <<= 3;
+                    break;
+                case '5':
+                    size_start <<= 4;
+                    break;
+                case '6':
+                    size_start <<= 5;
+                    break;
+                case '7':
+                    size_start <<= 6;
+                    break;
+                case '8':
+                    size_start <<= 7;
+                    break;
+                case '9':
+                    // 4095 is too big
+                    size_start <<= 8;
+                    break;
+                case 'a':
+                    toggle_aa();
+                    return;
+                default:
+                    break;
+            }
+            size_start -= 1;
+            console.log(size_start);
+            app.set_grid_resolution(size_start, size_start);
+        });
     }
 
     run();
